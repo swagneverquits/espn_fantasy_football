@@ -1,0 +1,39 @@
+# -------------------------
+# Python
+# -------------------------
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+*.egg-info/
+
+# IDE settings
+.idea/
+.vscode/
+
+# -------------------------
+# Project-specific
+# -------------------------
+
+# Secrets
+.env
+
+# Logs
+*.log
+
+# Data outputs (plots + results)
+data/plots/
+data/results/
+
+# Temp / scratch
+*.tmp
+*.bak
+.DS_Store
+src/__sandbox__/
