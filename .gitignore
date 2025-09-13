@@ -37,3 +37,4 @@ data/results/
 *.bak
 .DS_Store
 src/__sandbox__/
+*dump*
