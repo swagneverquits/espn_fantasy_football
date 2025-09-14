@@ -16,12 +16,7 @@ def normalize_team_names(matchup_df: pd.DataFrame) -> pd.DataFrame:
         df_m["slot"] = df_m.groupby("time").cumcount()
 
         # Find the most recent team name for each slot
-        most_recent = (
-            df_m.groupby("slot")
-                .tail(1)
-                .set_index("slot")["team"]
-                .to_dict()
-        )
+        most_recent = df_m.groupby("slot").tail(1).set_index("slot")["team"].to_dict()
 
         # Replace all names in df_m with the most recent name per slot
         df_m["team"] = df_m["slot"].map(most_recent)

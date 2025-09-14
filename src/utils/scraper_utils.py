@@ -24,12 +24,16 @@ def login_to_espn(driver: WebDriver, league_id: int, email: str, password: str):
     driver.get(league_url)
 
     # Wait for iframe and switch
-    WebDriverWait(driver, 20).until(EC.presence_of_all_elements_located((By.XPATH, "(//iframe)")))
+    WebDriverWait(driver, 20).until(
+        EC.presence_of_all_elements_located((By.XPATH, "(//iframe)"))
+    )
     driver.switch_to.frame(driver.find_elements(By.XPATH, "(//iframe)")[0])
     time.sleep(np.random.uniform(1, 1.5))
 
     # Email entry
-    email_input = wait_for_element(driver, By.XPATH, '//*[@id="InputIdentityFlowValue"]')
+    email_input = wait_for_element(
+        driver, By.XPATH, '//*[@id="InputIdentityFlowValue"]'
+    )
     for c in email:
         email_input.send_keys(c)
         time.sleep(np.random.uniform(0.03, 0.04))
@@ -58,7 +62,9 @@ def navigate_to_scoreboard(driver, timeout: int = 10):
     time.sleep(np.random.uniform(3, 4))
 
     tab = WebDriverWait(driver, timeout).until(
-        EC.element_to_be_clickable((By.CSS_SELECTOR, 'a[href*="/football/league/scoreboard"]'))
+        EC.element_to_be_clickable(
+            (By.CSS_SELECTOR, 'a[href*="/football/league/scoreboard"]')
+        )
     )
     tab.click()
     return driver
@@ -69,7 +75,9 @@ def navigate_to_matchups(driver, timeout: int = 10):
     time.sleep(np.random.uniform(3, 4))
 
     tab = WebDriverWait(driver, timeout).until(
-        EC.element_to_be_clickable((By.CSS_SELECTOR, 'a[href*="/football/fantasycast"]'))
+        EC.element_to_be_clickable(
+            (By.CSS_SELECTOR, 'a[href*="/football/fantasycast"]')
+        )
     )
     tab.click()
     time.sleep(np.random.uniform(10, 15))
@@ -101,28 +109,38 @@ def scrape_matchups(driver):
     """Scrape matchup data and return it as a DataFrame."""
     import pandas as pd  # local import avoids circular deps
 
-    matchups = driver.find_elements(By.XPATH, "//*[contains(@class, 'carousel__slide')]")
+    matchups = driver.find_elements(
+        By.XPATH, "//*[contains(@class, 'carousel__slide')]"
+    )
     team_dicts = {}
 
     for i, matchup in enumerate(matchups):
         timestamp = datetime.datetime.now()
         matchup.click()
 
-        elements = driver.find_elements(By.XPATH, '//div[contains(@class, "h2h-matchup-header")]')
+        elements = driver.find_elements(
+            By.XPATH, '//div[contains(@class, "h2h-matchup-header")]'
+        )
 
         for j, element in enumerate(elements):
             side = "r" if j == 0 else "l"
-            team_name = element.find_element(By.XPATH, './/span[contains(@class, "teamName")]').text
+            team_name = element.find_element(
+                By.XPATH, './/span[contains(@class, "teamName")]'
+            ).text
 
             team_dict = {
                 "Matchup": i,
                 "Score": float(element.find_element(By.XPATH, ".//h2").text),
                 "WinChance": float(
-                    element.find_element(By.XPATH, f'//*[contains(@class, "p{side}2 totalPerc")]')
-                    .text.replace("%", "")
-                ) / 100.0,
+                    element.find_element(
+                        By.XPATH, f'//*[contains(@class, "p{side}2 totalPerc")]'
+                    ).text.replace("%", "")
+                )
+                / 100.0,
                 "Projected": float(
-                    element.find_elements(By.XPATH, f'//div[contains(text(), "Proj Total")]//span')[j].text
+                    element.find_elements(
+                        By.XPATH, f'//div[contains(text(), "Proj Total")]//span'
+                    )[j].text
                 ),
             }
             team_dicts[(timestamp, team_name)] = team_dict

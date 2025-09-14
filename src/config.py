@@ -19,7 +19,9 @@ EMAIL = os.getenv("ESPN_EMAIL")
 PASSWORD = os.getenv("ESPN_PASSWORD")
 
 if not EMAIL or not PASSWORD:
-    raise ValueError("❌ ESPN_EMAIL and ESPN_PASSWORD must be set in environment variables or .env")
+    raise ValueError(
+        "❌ ESPN_EMAIL and ESPN_PASSWORD must be set in environment variables or .env"
+    )
 
 
 # ------------------------

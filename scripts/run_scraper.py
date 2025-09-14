@@ -4,8 +4,8 @@ Entry point for running the ESPN fantasy football scraper.
 """
 
 import logging
-from src.scraper import main
 
+from src.scraper import main
 
 if __name__ == "__main__":
     logging.basicConfig(

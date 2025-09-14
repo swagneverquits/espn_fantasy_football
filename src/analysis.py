@@ -8,12 +8,14 @@ import pandas as pd
 # ------------------------
 from src.config import LEAGUE_IDS
 from src.utils.data_utils import normalize_team_names
-from src.utils.io_utils import get_results_file, get_plots_dir, load_results
+from src.utils.io_utils import get_plots_dir, get_results_file, load_results
 from src.utils.plot_utils import plot_matchup, set_plot_style
 
 set_plot_style()
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 SEASON = 2025
 WEEK = 1

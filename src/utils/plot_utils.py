@@ -1,12 +1,11 @@
 import logging
 
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mtick
 import numpy as np
 import pandas as pd
 import seaborn as sns
-
 from matplotlib.dates import DateFormatter
-import matplotlib.ticker as mtick
 
 
 def set_plot_style():
@@ -23,7 +22,10 @@ def plot_matchup(matchup_df, team1, team2, days, width_ratios, savepath, week):
         figsize=(12, 6),
         sharey="row",
         sharex="col",
-        gridspec_kw={"width_ratios": width_ratios[: len(days)], "height_ratios": [3, 2]},
+        gridspec_kw={
+            "width_ratios": width_ratios[: len(days)],
+            "height_ratios": [3, 2],
+        },
     )
 
     # handle case when len(days) == 1 (axs not 2D)
