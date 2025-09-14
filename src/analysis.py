@@ -33,9 +33,9 @@ num_matchups = int(df["Matchup"].max()) + 1
 # Precompute day lengths for subplot width ratios
 lengths = (
     df.reset_index()
-        .groupby("date")["time"]
-        .agg(["min", "max"])
-        .assign(diff=lambda x: (x["max"] - x["min"]).dt.total_seconds())
+    .groupby("date")["time"]
+    .agg(["min", "max"])
+    .assign(diff=lambda x: (x["max"] - x["min"]).dt.total_seconds())
 )
 width_ratios = lengths["diff"].astype(float).values
 
