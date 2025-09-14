@@ -5,6 +5,7 @@ Centralizes secrets, paths, and league URLs.
 
 import os
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 # Load variables from a .env file if present (local dev convenience)
@@ -40,11 +41,10 @@ RESULTS_DIR = DATA_DIR / "results"
 # Plots directory
 PLOTS_DIR = DATA_DIR / "plots"
 
-
 # ------------------------
 # League Configs
 # ------------------------
-LEAGUE_IDS = [
-    1850396491,  # college peeps
-    1012938436,  # high school boyos
-]
+LEAGUE_IDS = {
+    "college": 1850396491,
+    "high_school": 1012938436,
+}

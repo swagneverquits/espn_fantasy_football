@@ -3,16 +3,18 @@ import time
 
 import numpy as np
 
-from .config import EMAIL, PASSWORD
+from .config import EMAIL, PASSWORD, LEAGUE_IDS
 from .utils.browser_utils import create_driver
 from .utils.io_utils import get_results_path
 from .utils.scraper_utils import login_to_espn, navigate_to_scoreboard, get_nfl_week_from_scoreboard, \
     navigate_to_matchups, scrape_matchups
 
+LEAGUE = "college"
+
 
 def main():
     headless = False
-    league_id = 1012938436
+    league_id = LEAGUE_IDS[LEAGUE]
 
     driver = create_driver(headless=headless)
 
@@ -25,7 +27,7 @@ def main():
     # get the current week
     week = get_nfl_week_from_scoreboard(driver)
 
-    results_file = get_results_path(league_id, week)
+    results_file = get_results_path(LEAGUE, week)
     logging.info(f"Saving results to {results_file}")
 
     # navigate to the fantasy cast

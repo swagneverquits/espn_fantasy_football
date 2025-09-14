@@ -1,12 +1,14 @@
-import pandas as pd
-import numpy as np
 import logging
+
+import numpy as np
+import pandas as pd
 
 # ------------------------
 # Config & Style
 # ------------------------
-from src.config import RESULTS_DIR, PLOTS_DIR
-from src.utils.io_utils import get_results_file, get_plots_dir
+from src.config import LEAGUE_IDS
+from src.utils.data_utils import normalize_team_names
+from src.utils.io_utils import get_results_file, get_plots_dir, load_results
 from src.utils.plot_utils import plot_matchup, set_plot_style
 
 set_plot_style()
@@ -15,27 +17,25 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 
 SEASON = 2025
 WEEK = 1
-LEAGUE_ID = 1012938436
+LEAGUE = "college"
+LEAGUE_ID = LEAGUE_IDS[LEAGUE]
 
-results_file = get_results_file(SEASON, WEEK, LEAGUE_ID)
-plots_path = get_plots_dir(SEASON, WEEK, LEAGUE_ID)
+results_file = get_results_file(SEASON, WEEK, LEAGUE)
+plots_path = get_plots_dir(SEASON, WEEK, LEAGUE)
 
 # ------------------------
 # Load & Prep Data
 # ------------------------
-df = pd.read_csv(results_file)
-df["time"] = pd.to_datetime(df["time"])
-df["date"] = df["time"].dt.date
-df = df.set_index(["time", "team"])
-
+df = load_results(SEASON, WEEK, LEAGUE)
+df = normalize_team_names(df)
 num_matchups = int(df["Matchup"].max()) + 1
 
 # Precompute day lengths for subplot width ratios
 lengths = (
     df.reset_index()
-    .groupby("date")["time"]
-    .agg(["min", "max"])
-    .assign(diff=lambda x: (x["max"] - x["min"]).dt.total_seconds())
+        .groupby("date")["time"]
+        .agg(["min", "max"])
+        .assign(diff=lambda x: (x["max"] - x["min"]).dt.total_seconds())
 )
 width_ratios = lengths["diff"].astype(float).values
 
@@ -44,6 +44,7 @@ width_ratios = lengths["diff"].astype(float).values
 # ------------------------
 for i in range(num_matchups):
     matchup_df = df[df["Matchup"].eq(i)]
+
     days = np.unique(matchup_df["date"])
 
     matchup_df = pd.pivot_table(
