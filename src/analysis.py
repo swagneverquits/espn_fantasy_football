@@ -18,8 +18,8 @@ logging.basicConfig(
 )
 
 SEASON = 2025
-WEEK = 1
-LEAGUE = "college"
+WEEK = 2
+LEAGUE = "high_school"
 LEAGUE_ID = LEAGUE_IDS[LEAGUE]
 
 results_file = get_results_file(SEASON, WEEK, LEAGUE)

@@ -14,7 +14,7 @@ from .utils.scraper_utils import (
     scrape_matchups,
 )
 
-LEAGUE = "college"
+LEAGUE = "high_school"
 
 
 def main():

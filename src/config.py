@@ -49,4 +49,5 @@ PLOTS_DIR = DATA_DIR / "plots"
 LEAGUE_IDS = {
     "college": 1850396491,
     "high_school": 1012938436,
+    "charter": 1975629525,
 }
