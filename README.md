@@ -55,6 +55,12 @@ python -m py_compile fantasy_football\config.py fantasy_football\scraper.py fant
 python scripts\run_analysis.py --help
 ```
 
+Run tests:
+
+```powershell
+python -m unittest discover -s tests -v
+```
+
 ## Run The Scraper
 
 ```powershell
