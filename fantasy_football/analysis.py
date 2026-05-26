@@ -6,10 +6,10 @@ import pandas as pd
 # ------------------------
 # Config & Style
 # ------------------------
-from src.config import LEAGUE_IDS
-from src.utils.data_utils import normalize_team_names
-from src.utils.io_utils import get_plots_dir, get_results_file, load_results
-from src.utils.plot_utils import plot_matchup, set_plot_style
+from fantasy_football.config import LEAGUE_IDS
+from fantasy_football.utils.data_utils import normalize_team_names
+from fantasy_football.utils.io_utils import get_plots_dir, get_results_file, load_results
+from fantasy_football.utils.plot_utils import plot_matchup, set_plot_style
 
 set_plot_style()
 
@@ -18,8 +18,8 @@ logging.basicConfig(
 )
 
 SEASON = 2025
-WEEK = 2
-LEAGUE = "high_school"
+WEEK = 3
+LEAGUE = "college"
 LEAGUE_ID = LEAGUE_IDS[LEAGUE]
 
 results_file = get_results_file(SEASON, WEEK, LEAGUE)

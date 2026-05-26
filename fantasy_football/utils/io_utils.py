@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.config import PLOTS_DIR, RESULTS_DIR, SEASON
+from fantasy_football.config import PLOTS_DIR, RESULTS_DIR, SEASON
 
 
 def get_results_path(league: str, week: int) -> Path:

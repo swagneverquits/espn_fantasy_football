@@ -37,4 +37,6 @@ data/results/
 *.bak
 .DS_Store
 src/__sandbox__/
+fantasy_football/__sandbox__/
 *dump*
+plans/

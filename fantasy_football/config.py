@@ -46,8 +46,15 @@ PLOTS_DIR = DATA_DIR / "plots"
 # ------------------------
 # League Configs
 # ------------------------
+def _required_int_env(name: str) -> int:
+    value = os.getenv(name)
+    if not value:
+        raise ValueError(f"{name} must be set in environment variables or .env")
+    return int(value)
+
+
 LEAGUE_IDS = {
-    "college": 1850396491,
-    "high_school": 1012938436,
-    "charter": 1975629525,
+    "college": _required_int_env("ESPN_LEAGUE_ID_COLLEGE"),
+    "high_school": _required_int_env("ESPN_LEAGUE_ID_HIGH_SCHOOL"),
+    "charter": _required_int_env("ESPN_LEAGUE_ID_CHARTER"),
 }
