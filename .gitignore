@@ -30,6 +30,8 @@ env/
 
 # Data outputs (plots + results)
 data/plots/
+data/processed/
+data/raw/
 data/results/
 
 # Temp / scratch

@@ -37,11 +37,20 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 # Data directory always under /data
 DATA_DIR = PROJECT_ROOT / "data"
 
-# Results directory
+# Raw scraped CSV snapshots
+RAW_DATA_DIR = DATA_DIR / "raw"
+
+# Processed CSV snapshots used by analysis
+PROCESSED_DATA_DIR = DATA_DIR / "processed"
+
+# Backward-compatible results directory for existing local outputs
 RESULTS_DIR = DATA_DIR / "results"
 
 # Plots directory
 PLOTS_DIR = DATA_DIR / "plots"
+
+# Local scratch directory for debug dumps and experiments
+SCRATCH_DIR = PROJECT_ROOT / "scratch"
 
 # ------------------------
 # League Configs

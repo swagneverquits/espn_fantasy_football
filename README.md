@@ -15,6 +15,8 @@ scripts/
   run_scraper.py         CLI entry point for live scraping
   run_analysis.py        CLI entry point for plot generation
 data/
+  raw/                   Optional raw scraped data, ignored by Git
+  processed/             Optional cleaned analysis data, ignored by Git
   results/               Generated CSV snapshots, ignored by Git
   plots/                 Generated matchup plots, ignored by Git
 ```
@@ -54,6 +56,8 @@ The scraper opens Chrome, logs into ESPN, detects the active NFL week, navigates
 ```text
 data/results/<season>/<league>/week_<week>.csv
 ```
+
+`data/results/` is the current scraper output location. `data/raw/` and `data/processed/` are reserved for a future data pipeline split.
 
 Current caveat: the scraper league is hardcoded in `fantasy_football/scraper.py`.
 

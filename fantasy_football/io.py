@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from fantasy_football.config import PLOTS_DIR, RESULTS_DIR, SEASON
+from fantasy_football.config import PLOTS_DIR, RESULTS_DIR, SCRATCH_DIR, SEASON
 
 
 def get_results_path(league: str, week: int) -> Path:
@@ -38,11 +38,10 @@ def load_results(season: int, week: int, league: str) -> pd.DataFrame:
 
 
 def dump_html(driver, filename="page_dump.html"):
-    # Point to sandbox folder
-    sandbox_dir = Path(__file__).resolve().parent.parent / "__sandbox__"
-    sandbox_dir.mkdir(parents=True, exist_ok=True)
+    dumps_dir = SCRATCH_DIR / "dumps"
+    dumps_dir.mkdir(parents=True, exist_ok=True)
 
-    filepath = sandbox_dir / filename
+    filepath = dumps_dir / filename
     with open(filepath, "w", encoding="utf-8") as f:
         f.write(driver.page_source)
 
