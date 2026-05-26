@@ -4,9 +4,9 @@ import time
 import numpy as np
 
 from .config import EMAIL, LEAGUE_IDS, PASSWORD
-from .utils.browser_utils import create_driver
-from .utils.io_utils import get_results_path
-from .utils.scraper_utils import (
+from .io import get_results_path
+from .scraping.browser import create_driver
+from .scraping.espn import (
     get_nfl_week_from_scoreboard,
     login_to_espn,
     navigate_to_matchups,

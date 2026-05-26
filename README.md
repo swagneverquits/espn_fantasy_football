@@ -7,9 +7,10 @@ Tools for collecting live ESPN fantasy football matchup data and generating matc
 ```text
 fantasy_football/
   config.py              Environment, paths, and league IDs
+  io.py                  CSV and output path helpers
   scraper.py             Main live scraping workflow
-  analysis.py            Plot generation workflow
-  utils/                 Browser, scraping, IO, data, and plotting helpers
+  analysis/              Transform, plotting, and report generation workflow
+  scraping/              Browser setup and ESPN scraping helpers
 scripts/
   run_scraper.py         CLI entry point for live scraping
 data/
@@ -67,7 +68,7 @@ The analysis workflow loads a collected CSV, normalizes team names, and writes m
 data/plots/<season>/<league>/week_<week>/
 ```
 
-Current caveat: season, week, and league are hardcoded in `fantasy_football/analysis.py`.
+Current caveat: season, week, and league are hardcoded in `fantasy_football/analysis/reports.py`.
 
 ## Notes
 

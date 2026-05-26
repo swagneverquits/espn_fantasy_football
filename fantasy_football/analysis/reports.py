@@ -6,10 +6,10 @@ import pandas as pd
 # ------------------------
 # Config & Style
 # ------------------------
+from fantasy_football.analysis.plots import plot_matchup, set_plot_style
+from fantasy_football.analysis.transform import normalize_team_names
 from fantasy_football.config import LEAGUE_IDS
-from fantasy_football.utils.data_utils import normalize_team_names
-from fantasy_football.utils.io_utils import get_plots_dir, get_results_file, load_results
-from fantasy_football.utils.plot_utils import plot_matchup, set_plot_style
+from fantasy_football.io import get_plots_dir, get_results_file, load_results
 
 set_plot_style()
 
