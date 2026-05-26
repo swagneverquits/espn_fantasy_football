@@ -51,7 +51,7 @@ def login_to_espn(driver: WebDriver, league_id: int, email: str, password: str):
     time.sleep(np.random.uniform(1, 1.5))
     password_input.send_keys(Keys.ENTER)
 
-    logging.info("🔐 Login submitted")
+    logging.info("Login submitted")
 
     time.sleep(np.random.uniform(5, 10))
     return driver
@@ -115,7 +115,7 @@ def scrape_matchups(driver):
     team_dicts = {}
 
     for i, matchup in enumerate(matchups):
-        timestamp = datetime.datetime.now()
+        timestamp = datetime.datetime.now().astimezone()
         matchup.click()
 
         elements = driver.find_elements(

@@ -77,4 +77,4 @@ def plot_matchup(matchup_df, team1, team2, days, width_ratios, savepath, week):
     fig.subplots_adjust(wspace=0.05)
     fig.savefig(savepath)
     plt.close(fig)
-    logging.info(f"Saved plot → {savepath}")
+    logging.info("Saved plot -> %s", savepath)

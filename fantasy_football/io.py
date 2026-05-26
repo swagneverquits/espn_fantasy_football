@@ -30,8 +30,18 @@ def load_results(season: int, week: int, league: str) -> pd.DataFrame:
     Load results CSV for a given season, week, and league.
     Parses datetime and sets a proper index.
     """
-    results_file = Path(RESULTS_DIR) / str(season) / league / f"week_{week}.csv"
-    df = pd.read_csv(results_file)
+    results_file = get_results_file(season, week, league)
+    if not results_file.exists():
+        raise FileNotFoundError(f"Results file not found: {results_file}")
+
+    try:
+        df = pd.read_csv(results_file)
+    except pd.errors.EmptyDataError as exc:
+        raise ValueError(f"Results file is empty: {results_file}") from exc
+
+    if df.empty:
+        raise ValueError(f"Results file has no rows: {results_file}")
+
     df["time"] = pd.to_datetime(df["time"])
     df["date"] = df["time"].dt.date
     return df.set_index(["time", "team"])

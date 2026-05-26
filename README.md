@@ -64,7 +64,7 @@ python -m unittest discover -s tests -v
 ## Run The Scraper
 
 ```powershell
-python scripts/run_scraper.py
+python scripts/run_scraper.py --league high_school
 ```
 
 The scraper opens Chrome, logs into ESPN, detects the active NFL week, navigates to FantasyCast, and appends matchup snapshots to:
@@ -75,7 +75,22 @@ data/results/<season>/<league>/week_<week>.csv
 
 `data/results/` is the current scraper output location. `data/raw/` and `data/processed/` are reserved for a future data pipeline split.
 
-Current caveat: the scraper league is hardcoded in `fantasy_football/scraper.py`.
+For a one-shot smoke test before a long live run:
+
+```powershell
+python scripts/run_scraper.py --league high_school --once
+```
+
+Useful scraper options:
+
+```text
+--league {charter,college,high_school}
+--headless
+--interval 10
+--refresh-interval 300
+--retry-interval 30
+--once
+```
 
 ## Generate Plots
 
@@ -98,5 +113,5 @@ python -m fantasy_football.analysis --season 2025 --week 3 --league college
 ## Notes
 
 - Do not commit `.env`; it contains ESPN credentials and private league IDs.
-- `requirements.txt` currently reflects an older local environment; prefer `environment.yml` for fresh setup.
+- Prefer `environment.yml` for Conda setup. `requirements.txt` is a small pip-compatible fallback.
 - Generated data and plots are intentionally excluded from Git.

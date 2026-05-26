@@ -66,7 +66,10 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    saved_paths = generate_matchup_plots(args.season, args.week, args.league)
+    try:
+        saved_paths = generate_matchup_plots(args.season, args.week, args.league)
+    except (FileNotFoundError, ValueError) as exc:
+        raise SystemExit(f"Analysis input error: {exc}") from exc
     logging.info("Generated %d plot(s)", len(saved_paths))
 
 
