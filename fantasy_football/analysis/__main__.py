@@ -1,1 +1,5 @@
-from . import reports  # noqa: F401
+from .reports import main
+
+
+if __name__ == "__main__":
+    main()

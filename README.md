@@ -13,6 +13,7 @@ fantasy_football/
   scraping/              Browser setup and ESPN scraping helpers
 scripts/
   run_scraper.py         CLI entry point for live scraping
+  run_analysis.py        CLI entry point for plot generation
 data/
   results/               Generated CSV snapshots, ignored by Git
   plots/                 Generated matchup plots, ignored by Git
@@ -59,7 +60,7 @@ Current caveat: the scraper league is hardcoded in `fantasy_football/scraper.py`
 ## Generate Plots
 
 ```powershell
-python -m fantasy_football.analysis
+python scripts/run_analysis.py --season 2025 --week 3 --league college
 ```
 
 The analysis workflow loads a collected CSV, normalizes team names, and writes matchup plots to:
@@ -68,7 +69,11 @@ The analysis workflow loads a collected CSV, normalizes team names, and writes m
 data/plots/<season>/<league>/week_<week>/
 ```
 
-Current caveat: season, week, and league are hardcoded in `fantasy_football/analysis/reports.py`.
+The same workflow can also be run as a module:
+
+```powershell
+python -m fantasy_football.analysis --season 2025 --week 3 --league college
+```
 
 ## Notes
 

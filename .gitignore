@@ -38,5 +38,6 @@ data/results/
 .DS_Store
 src/__sandbox__/
 fantasy_football/__sandbox__/
+scratch/
 *dump*
 plans/
