@@ -25,10 +25,11 @@ Local-only files such as `.env`, `data/`, page dumps, scratch files, caches, and
 
 ## Setup
 
-Create a Python environment, then install dependencies:
+Create the Conda environment:
 
 ```powershell
-pip install -r requirements.txt
+conda env create -f environment.yml
+conda activate espn-fantasy-football
 ```
 
 Copy `.env.example` to `.env` and fill in the local values:
@@ -44,6 +45,15 @@ ESPN_LEAGUE_ID_CHARTER=
 ```
 
 `ESPN_EMAIL` and `ESPN_PASSWORD` are required for ESPN login. The league IDs are private ESPN fantasy league identifiers and should stay in `.env`.
+
+Chrome must be installed locally for Selenium scraping. Selenium 4.6+ can usually manage ChromeDriver automatically; set `CHROMEDRIVER_PATH` only if your machine needs an explicit driver path.
+
+Verify the environment:
+
+```powershell
+python -m py_compile fantasy_football\config.py fantasy_football\scraper.py fantasy_football\analysis\reports.py scripts\run_scraper.py scripts\run_analysis.py
+python scripts\run_analysis.py --help
+```
 
 ## Run The Scraper
 
@@ -82,5 +92,5 @@ python -m fantasy_football.analysis --season 2025 --week 3 --league college
 ## Notes
 
 - Do not commit `.env`; it contains ESPN credentials and private league IDs.
-- Selenium 4.6+ can auto-manage ChromeDriver, but `CHROMEDRIVER_PATH` is available for local configuration.
+- `requirements.txt` currently reflects an older local environment; prefer `environment.yml` for fresh setup.
 - Generated data and plots are intentionally excluded from Git.
