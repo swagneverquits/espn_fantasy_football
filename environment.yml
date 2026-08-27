@@ -9,3 +9,5 @@ dependencies:
   - python-dotenv
   - seaborn
   - selenium
+  - black
+  - isort

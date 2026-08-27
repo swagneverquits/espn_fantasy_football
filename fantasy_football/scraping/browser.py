@@ -15,5 +15,7 @@ def create_driver(headless: bool = True) -> webdriver.Chrome:
     options.add_argument("--window-size=1920,1080")
 
     driver = webdriver.Chrome(options=options)
-    logging.info("Chrome driver initialized (%s)", "headless" if headless else "visible")
+    logging.info(
+        "Chrome driver initialized (%s)", "headless" if headless else "visible"
+    )
     return driver

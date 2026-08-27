@@ -1,0 +1,20 @@
+[tool.black]
+line-length = 88
+target-version = ['py311']
+include = '\.pyi?$'
+exclude = '''
+(
+    /(
+        \.git
+      | \.venv
+      | __pycache__
+      | data
+      | scratch
+    )/
+)
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 88
+known_first_party = ["fantasy_football"]

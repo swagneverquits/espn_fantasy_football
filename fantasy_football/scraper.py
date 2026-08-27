@@ -33,7 +33,9 @@ def validate_league(league: str) -> int:
         return LEAGUE_IDS[league]
     except KeyError as exc:
         valid_leagues = ", ".join(sorted(LEAGUE_IDS))
-        raise ValueError(f"Unknown league '{league}'. Expected one of: {valid_leagues}") from exc
+        raise ValueError(
+            f"Unknown league '{league}'. Expected one of: {valid_leagues}"
+        ) from exc
 
 
 def write_snapshot(results_file, df, run_id: str, scrape_id: int) -> int:
