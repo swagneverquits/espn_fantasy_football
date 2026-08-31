@@ -1,117 +1,61 @@
 # ESPN Fantasy Football
 
-Tools for collecting live ESPN fantasy football matchup data and generating matchup plots from the collected CSV snapshots.
+Tools for collecting live ESPN Fantasy Football matchup data and generating compact matchup plots.
 
-## Project Layout
+## Project layout
 
 ```text
 fantasy_football/
   config.py              Environment, paths, and league IDs
   io.py                  CSV and output path helpers
-  scraper.py             Main live scraping workflow
+  espn_scraping/         ESPN JSON API client, parser, scraper, and plotter
   analysis/              Transform, plotting, and report generation workflow
-  scraping/              Browser setup and ESPN scraping helpers
 scripts/
-  run_scraper.py         CLI entry point for live scraping
+  run_api_scraper.py     CLI entry point for API polling
   run_analysis.py        CLI entry point for plot generation
-data/
-  raw/                   Optional raw scraped data, ignored by Git
-  processed/             Optional cleaned analysis data, ignored by Git
-  results/               Generated CSV snapshots, ignored by Git
-  plots/                 Generated matchup plots, ignored by Git
 ```
 
-Local-only files such as `.env`, `data/`, page dumps, scratch files, caches, and plans are ignored by Git.
+Local-only files such as `.env`, generated data, scratch files, caches, and plans are ignored by Git.
 
 ## Setup
-
-Create the Conda environment:
 
 ```powershell
 conda env create -f environment.yml
 conda activate espn-fantasy-football
 ```
 
-Copy `.env.example` to `.env` and fill in the local values:
+Configure the private league IDs and ESPN session cookies in `.env`:
 
 ```text
-ESPN_EMAIL=
-ESPN_PASSWORD=
-CHROMEDRIVER_PATH=
+ESPN_S2=
+ESPN_SWID=
 DEFAULT_LEAGUE=
 ESPN_LEAGUE_ID_COLLEGE=
 ESPN_LEAGUE_ID_HIGH_SCHOOL=
 ESPN_LEAGUE_ID_CHARTER=
 ```
 
-`ESPN_EMAIL` and `ESPN_PASSWORD` are required for ESPN login. The league IDs are private ESPN fantasy league identifiers and should stay in `.env`.
-
-Chrome must be installed locally for Selenium scraping. Selenium 4.6+ can usually manage ChromeDriver automatically; set `CHROMEDRIVER_PATH` only if your machine needs an explicit driver path.
-
-Verify the environment:
+## Run the API scraper
 
 ```powershell
-python -m py_compile fantasy_football\config.py fantasy_football\scraper.py fantasy_football\analysis\reports.py scripts\run_scraper.py scripts\run_analysis.py
-python scripts\run_analysis.py --help
+python scripts/run_api_scraper.py --league high_school --once
+python scripts/run_api_scraper.py --league college --interval 30
 ```
 
-Run tests:
+Snapshots are written to `data/results/<season>/<league>/week_<week>.csv`.
 
-```powershell
-python -m unittest discover -s tests -v
-```
-
-## Run The Scraper
-
-```powershell
-python scripts/run_scraper.py --league high_school
-```
-
-The scraper opens Chrome, logs into ESPN, detects the active NFL week, navigates to FantasyCast, and appends matchup snapshots to:
-
-```text
-data/results/<season>/<league>/week_<week>.csv
-```
-
-`data/results/` is the current scraper output location. `data/raw/` and `data/processed/` are reserved for a future data pipeline split.
-
-For a one-shot smoke test before a long live run:
-
-```powershell
-python scripts/run_scraper.py --league high_school --once
-```
-
-Useful scraper options:
-
-```text
---league {charter,college,high_school}
---headless
---interval 10
---refresh-interval 300
---retry-interval 30
---once
-```
-
-## Generate Plots
+## Generate plots
 
 ```powershell
 python scripts/run_analysis.py --season 2025 --week 3 --league college
 ```
 
-The analysis workflow loads a collected CSV, normalizes team names, and writes matchup plots to:
+Generated plots are written to `data/plots/<season>/<league>/week_<week>/`.
 
-```text
-data/plots/<season>/<league>/week_<week>/
-```
-
-The same workflow can also be run as a module:
+## Checks
 
 ```powershell
-python -m fantasy_football.analysis --season 2025 --week 3 --league college
+python -m unittest discover -s tests -v
+black fantasy_football scripts tests
+isort fantasy_football scripts tests
 ```
-
-## Notes
-
-- Do not commit `.env`; it contains ESPN credentials and private league IDs.
-- Prefer `environment.yml` for Conda setup. `requirements.txt` is a small pip-compatible fallback.
-- Generated data and plots are intentionally excluded from Git.

@@ -3,6 +3,5 @@ numpy
 pandas
 python-dotenv
 seaborn
-selenium
 black
 isort

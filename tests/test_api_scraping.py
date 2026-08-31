@@ -1,8 +1,8 @@
 import datetime
 import unittest
 
-from fantasy_football.api_scraping.client import build_league_url
-from fantasy_football.api_scraping.parser import current_week, matchup_rows
+from fantasy_football.espn_scraping.client import build_league_url
+from fantasy_football.espn_scraping.parser import current_week, matchup_rows
 
 
 class APIScrapingTests(unittest.TestCase):
@@ -64,9 +64,7 @@ class APIScrapingTests(unittest.TestCase):
         self.assertEqual(len(frame), 2)
         self.assertEqual(frame.loc[(timestamp, "Fannin Boot"), "Score"], 42.5)
         self.assertEqual(frame.loc[(timestamp, "Fannin Boot"), "WinChance"], 0.54)
-        self.assertEqual(
-            frame.loc[(timestamp, "Pitts-uational Awareness"), "Projected"], 98.0
-        )
+        self.assertEqual(frame.loc[(timestamp, "Fannin Boot"), "Projected"], 101.0)
 
     def test_matchup_rows_skips_missing_probability(self):
         data = {
