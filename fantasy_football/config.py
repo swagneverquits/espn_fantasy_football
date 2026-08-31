@@ -1,7 +1,4 @@
-"""
-Configuration for the Fantasy Football scraper.
-Centralizes secrets, paths, and league IDs.
-"""
+"""Shared environment, paths, and league configuration."""
 
 import os
 from pathlib import Path
@@ -10,13 +7,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Secrets / credentials
 SEASON = "2025"
-EMAIL = os.getenv("ESPN_EMAIL")
-PASSWORD = os.getenv("ESPN_PASSWORD")
-
-# Paths
-DRIVER_PATH = os.getenv("CHROMEDRIVER_PATH", "/usr/local/bin/chromedriver")
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
 RAW_DATA_DIR = DATA_DIR / "raw"

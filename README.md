@@ -1,17 +1,18 @@
 # ESPN Fantasy Football
 
-Tools for collecting live ESPN Fantasy Football matchup data and generating compact matchup plots.
+Tools for collecting live fantasy matchup data and generating compact matchup plots.
 
 ## Project layout
 
 ```text
 fantasy_football/
-  config.py              Environment, paths, and league IDs
-  io.py                  CSV and output path helpers
-  espn_scraping/         ESPN JSON API client, parser, scraper, and plotter
-  analysis/              Transform, plotting, and report generation workflow
+  config.py              Shared environment, paths, and league IDs
+  io.py                  Shared filesystem and data-loading helpers
+  espn_scraping/         ESPN JSON API client, parser, and scraper
+  sleeper_scraping/      Sleeper integration point
+  analysis/              Common normalization, plotting, and reports
 scripts/
-  run_api_scraper.py     CLI entry point for API polling
+  run_api_scraper.py     CLI entry point for ESPN API polling
   run_analysis.py        CLI entry point for plot generation
 ```
 
@@ -35,7 +36,7 @@ ESPN_LEAGUE_ID_HIGH_SCHOOL=
 ESPN_LEAGUE_ID_CHARTER=
 ```
 
-## Run the API scraper
+## Run the ESPN API scraper
 
 ```powershell
 python scripts/run_api_scraper.py --league high_school --once
