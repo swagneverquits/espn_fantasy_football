@@ -57,22 +57,3 @@ def fetch_weekly_player_data(sport: str, season: int, week: int):
         "stats": fetch_data_json(f"/stats{suffix}"),
         "projections": fetch_data_json(f"/projections{suffix}"),
     }
-
-
-def fetch_league_data(league_id: str):
-    """Fetch league metadata, users, rosters, and the current NFL week."""
-    league = fetch_json(f"/league/{league_id}")
-    users = fetch_json(f"/league/{league_id}/users")
-    rosters = fetch_json(f"/league/{league_id}/rosters")
-    state = fetch_json("/state/nfl")
-    week = int(state["week"])
-    matchups = fetch_json(f"/league/{league_id}/matchups/{week}")
-    player_data = fetch_weekly_player_data(league["sport"], int(league["season"]), week)
-    return {
-        "league": league,
-        "users": users,
-        "rosters": rosters,
-        "matchups": matchups,
-        "week": week,
-        "player_data": player_data,
-    }

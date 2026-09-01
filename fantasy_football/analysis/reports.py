@@ -1,3 +1,5 @@
+"""Generate matchup plots from the canonical SQLite database."""
+
 import argparse
 import logging
 from pathlib import Path
@@ -7,32 +9,44 @@ import pandas as pd
 from fantasy_football.analysis.plots import plot_matchup
 from fantasy_football.analysis.transform import normalize_team_names
 from fantasy_football.config import LEAGUE_IDS
-from fantasy_football.io import get_plots_dir, load_results
-
-DEFAULT_SEASON = 2025
-DEFAULT_WEEK = 3
-DEFAULT_LEAGUE = "college"
+from fantasy_football.constants import PLOTS_DIR, SQLITE_PATH
+from fantasy_football.storage import load_matchup_results
 
 
 def generate_matchup_plots(season: int, week: int, league: str) -> list[Path]:
-    """Generate common-format matchup plots for a collected snapshot file."""
+    """Generate one common-format plot per matchup in a league week."""
     if league not in LEAGUE_IDS:
         valid_leagues = ", ".join(sorted(LEAGUE_IDS))
         raise ValueError(f"Unknown league '{league}'. Expected one of: {valid_leagues}")
 
-    plots_path = get_plots_dir(season, week, league)
-    df = normalize_team_names(load_results(season, week, league)).reset_index()
-    num_matchups = int(df["Matchup"].max()) + 1
+    plots_path = PLOTS_DIR / str(season) / league / f"week_{week}"
+    plots_path.mkdir(parents=True, exist_ok=True)
+    df = normalize_team_names(
+        load_matchup_results(
+            SQLITE_PATH,
+            provider="espn",
+            league_id=LEAGUE_IDS[league],
+            season=season,
+            matchup_period=week,
+        )
+    ).reset_index()
+    matchup_ids = sorted(df["Matchup"].dropna().unique())
+    league_name = (
+        df["league_name"].dropna().iloc[0]
+        if df["league_name"].notna().any()
+        else league
+    )
+
     saved_paths = []
-    for matchup in range(num_matchups):
-        matchup_df = df[df["Matchup"].eq(matchup)].copy()
+    for matchup_number, matchup_id in enumerate(matchup_ids, start=1):
+        matchup_df = df[df["Matchup"].eq(matchup_id)].copy()
         days = list(pd.to_datetime(matchup_df["time"]).dt.day_name().drop_duplicates())
-        savepath = plots_path / f"matchup{matchup}.png"
+        savepath = plots_path / f"matchup{matchup_number}.png"
         plot_matchup(
             matchup_df,
-            league_name=league,
+            league_name=league_name,
             week=week,
-            matchup=matchup + 1,
+            matchup=matchup_number,
             days=days,
             savepath=savepath,
         )
@@ -42,9 +56,9 @@ def generate_matchup_plots(season: int, week: int, league: str) -> list[Path]:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate fantasy matchup plots.")
-    parser.add_argument("--season", type=int, default=DEFAULT_SEASON)
-    parser.add_argument("--week", type=int, default=DEFAULT_WEEK)
-    parser.add_argument("--league", choices=sorted(LEAGUE_IDS), default=DEFAULT_LEAGUE)
+    parser.add_argument("--season", type=int, required=True)
+    parser.add_argument("--week", type=int, required=True)
+    parser.add_argument("--league", choices=sorted(LEAGUE_IDS), required=True)
     return parser.parse_args()
 
 

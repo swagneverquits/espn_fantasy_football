@@ -6,6 +6,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from fantasy_football.constants import ESPN_API_HOST
+
 DEFAULT_VIEWS = (
     "mMatchup",
     "mMatchupScore",
@@ -50,5 +51,3 @@ def fetch_league_data(season: int, league_id: int, *, timeout: int = 30) -> dict
     if data.get("messages"):
         raise ESPNAPIError("ESPN API error: " + "; ".join(map(str, data["messages"])))
     return data
-
-

@@ -1,57 +1,56 @@
-# ESPN Fantasy Football
+# Fantasy Football
 
-Tools for collecting live fantasy matchup data and generating compact matchup plots.
+Tools for collecting live fantasy matchup data from ESPN and Sleeper, storing normalized snapshots in SQLite, and generating compact matchup plots.
 
 ## Project layout
 
 ```text
 fantasy_football/
-  config.py              Shared environment, paths, and league IDs
-  io.py                  Shared filesystem and data-loading helpers
-  espn_scraping/         ESPN JSON API client, parser, and scraper
-  sleeper_scraping/      Sleeper integration point
-  analysis/              Common normalization, plotting, and reports
+  constants.py          Shared paths, table names, column names, and defaults
+  config.py             TOML league configuration loading
+  storage.py            Shared SQLite schema and persistence
+  scrapers/
+    base.py             Provider scraper lifecycle
+    espn/               ESPN client, parser, and scraper
+    sleeper/            Sleeper client, parser, and scraper
+  analysis/             Common normalization, plotting, and reports
+config/
+  leagues.toml.example  Checked-in configuration template
 scripts/
-  run_api_scraper.py     CLI entry point for ESPN API polling
-  run_analysis.py        CLI entry point for plot generation
+  run_api_scraper.py    ESPN polling entry point
+  run_sleeper_scraper.py Sleeper polling entry point
+  run_analysis.py       Plot generation entry point
+results/
+  data/                 Generated SQLite database and archived data
+  plots/                Generated plots
 ```
-
-Local-only files such as `.env`, generated data, scratch files, caches, and plans are ignored by Git.
 
 ## Setup
 
 ```powershell
 conda env create -f environment.yml
 conda activate espn-fantasy-football
+Copy-Item config/leagues.toml.example config/leagues.toml
 ```
 
-Configure the private league IDs and ESPN session cookies in `.env`:
+Edit `config/leagues.toml` with the leagues to track. It is local-only and ignored by Git.
 
-```text
-ESPN_S2=
-ESPN_SWID=
-DEFAULT_LEAGUE=
-ESPN_LEAGUE_ID_COLLEGE=
-ESPN_LEAGUE_ID_HIGH_SCHOOL=
-ESPN_LEAGUE_ID_CHARTER=
-```
-
-## Run the ESPN API scraper
+## Run scrapers
 
 ```powershell
 python scripts/run_api_scraper.py --league high_school --once
-python scripts/run_api_scraper.py --league college --interval 30
+python scripts/run_sleeper_scraper.py --league-id 1313543921472651264 --once
 ```
 
-Snapshots are written to `data/results/<season>/<league>/week_<week>.csv`.
+The canonical database is written to `results/data/fantasy_football.sqlite`.
 
 ## Generate plots
 
 ```powershell
-python scripts/run_analysis.py --season 2025 --week 3 --league college
+python scripts/run_analysis.py --season 2026 --week 1 --league high_school
 ```
 
-Generated plots are written to `data/plots/<season>/<league>/week_<week>/`.
+Generated plots are written to `results/plots/<season>/<league>/week_<week>/`.
 
 ## Checks
 

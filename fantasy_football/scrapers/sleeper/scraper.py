@@ -1,11 +1,14 @@
 """Sleeper fantasy football scraper."""
 
-from fantasy_football.io import get_results_file
-from fantasy_football.storage import write_snapshot, write_sqlite_snapshot
+from typing import Any
 
-from .client import fetch_league_data
+import pandas as pd
+
+from fantasy_football.storage import write_sqlite_snapshot
+
+from ..base import JSONData, Scraper
+from .client import fetch_json, fetch_weekly_player_data
 from .parser import matchup_rows
-from ..base import Scraper
 
 
 class SleeperScraper(Scraper):
@@ -14,14 +17,66 @@ class SleeperScraper(Scraper):
     def __init__(self, league_id: str, *, season: int = 2026):
         self.league_id = str(league_id)
         self.season = season
+        self._weekly_metadata: JSONData | None = None
 
-    def scrape_once(self) -> int:
-        data = fetch_league_data(self.league_id)
+    def get_league_metadata(self) -> JSONData:
+        """Fetch league identity and users once for this scraper run."""
+        if self._weekly_metadata is None:
+            league = fetch_json(f"/league/{self.league_id}")
+            users = fetch_json(f"/league/{self.league_id}/users")
+            state = fetch_json("/state/nfl")
+            self._weekly_metadata = {
+                "league": league,
+                "users": users,
+                "week": int(state["week"]),
+            }
+        return self._weekly_metadata
+
+    def get_team_metadata(self, league_metadata: JSONData) -> list[dict[str, Any]]:
+        """Fetch rosters every poll so lineup changes are captured."""
+        return fetch_json(f"/league/{self.league_id}/rosters")
+
+    def get_player_metadata(
+        self, league_metadata: JSONData, team_metadata: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        # Sleeper player identity is carried by the live roster response.
+        return team_metadata
+
+    def get_live_snapshot(
+        self,
+        league_metadata: JSONData,
+        team_metadata: list[dict[str, Any]],
+        player_metadata: list[dict[str, Any]],
+    ) -> JSONData:
+        week = league_metadata["week"]
+        league = league_metadata["league"]
+        matchups = fetch_json(f"/league/{self.league_id}/matchups/{week}")
+        player_data = fetch_weekly_player_data(
+            league["sport"], int(league["season"]), week
+        )
+        return {"matchups": matchups, "player_data": player_data}
+
+    def normalize_snapshot(
+        self,
+        league_metadata: JSONData,
+        team_metadata: list[dict[str, Any]],
+        player_metadata: list[dict[str, Any]],
+        live_snapshot: JSONData,
+    ) -> pd.DataFrame:
+        data = {**league_metadata, "rosters": team_metadata, **live_snapshot}
+        return matchup_rows(data, matchup_period=data["week"])
+
+    def persist_snapshot(
+        self,
+        league_metadata: JSONData,
+        team_metadata: list[dict[str, Any]],
+        player_metadata: list[dict[str, Any]],
+        live_snapshot: JSONData,
+        frame: pd.DataFrame,
+    ) -> int:
+        data = {**league_metadata, "rosters": team_metadata, **live_snapshot}
         week = data["week"]
-        path = get_results_file(self.season, week, f"sleeper_{self.league_id}")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        frame = matchup_rows(data, matchup_period=week)
-        rows = write_snapshot(path, frame)
+        rows = len(frame)
         write_sqlite_snapshot(
             frame,
             provider="sleeper",
@@ -37,9 +92,9 @@ def main(
     league_id: str,
     *,
     season: int = 2026,
-    interval_seconds=30,
-    retry_seconds=30,
-    once=False,
+    interval_seconds: int = 30,
+    retry_seconds: int = 30,
+    once: bool = False,
 ):
     return SleeperScraper(league_id, season=season).run(
         interval_seconds=interval_seconds,
