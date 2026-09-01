@@ -1,7 +1,7 @@
 import datetime
 import unittest
 
-from fantasy_football.sleeper_scraping.parser import matchup_rows
+from fantasy_football.scrapers.sleeper.parser import matchup_rows
 
 
 class SleeperScrapingTests(unittest.TestCase):

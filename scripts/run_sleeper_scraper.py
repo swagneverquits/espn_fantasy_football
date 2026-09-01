@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fantasy_football.sleeper_scraping.scraper import main
+from fantasy_football.scrapers.sleeper.scraper import main
 
 parser = argparse.ArgumentParser(description="Run the Sleeper API scraper.")
 parser.add_argument("--league-id", default="1313543921472651264")

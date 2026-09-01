@@ -4,8 +4,7 @@ import json
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-API_HOST = "https://api.sleeper.app/v1"
-DATA_HOST = "https://api.sleeper.com"
+from fantasy_football.constants import SLEEPER_API_HOST, SLEEPER_DATA_HOST
 
 
 class SleeperAPIError(RuntimeError):
@@ -16,7 +15,7 @@ def fetch_json(path: str, *, timeout: int = 30):
     try:
         with urlopen(
             Request(
-                f"{API_HOST}{path}",
+                f"{SLEEPER_API_HOST}{path}",
                 headers={"User-Agent": "Fantasy Football collector"},
             ),
             timeout=timeout,
@@ -35,7 +34,7 @@ def fetch_data_json(path: str, *, timeout: int = 30):
     try:
         with urlopen(
             Request(
-                f"{DATA_HOST}{path}",
+                f"{SLEEPER_DATA_HOST}{path}",
                 headers={"User-Agent": "Fantasy Football collector"},
             ),
             timeout=timeout,

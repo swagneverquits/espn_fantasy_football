@@ -29,10 +29,7 @@ env/
 *.log
 
 # Data outputs (plots + results)
-data/plots/
-data/processed/
-data/raw/
-data/results/
+results/
 
 # Temp / scratch
 *.tmp
@@ -47,5 +44,3 @@ plans/
 # Local league configuration
 config/leagues.toml
 
-
-data/*.sqlite

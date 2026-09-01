@@ -1,8 +1,8 @@
 import datetime
 import unittest
 
-from fantasy_football.espn_scraping.client import build_league_url
-from fantasy_football.espn_scraping.parser import current_week, matchup_rows
+from fantasy_football.scrapers.espn.client import build_league_url
+from fantasy_football.scrapers.espn.parser import current_week, matchup_rows
 
 
 class APIScrapingTests(unittest.TestCase):

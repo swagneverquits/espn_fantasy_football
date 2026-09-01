@@ -9,7 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fantasy_football.config import LEAGUE_IDS
-from fantasy_football.espn_scraping.scraper import main
+from fantasy_football.scrapers.espn.scraper import main
 
 parser = argparse.ArgumentParser(description="Run the ESPN Fantasy API scraper.")
 parser.add_argument("--league", choices=sorted(LEAGUE_IDS), required=True)

@@ -5,7 +5,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-API_HOST = "https://lm-api-reads.fantasy.espn.com"
+from fantasy_football.constants import ESPN_API_HOST
 DEFAULT_VIEWS = (
     "mMatchup",
     "mMatchupScore",
@@ -23,7 +23,7 @@ class ESPNAPIError(RuntimeError):
 
 def build_league_url(season: int, league_id: int, views=DEFAULT_VIEWS) -> str:
     path = f"/apis/v3/games/ffl/seasons/{season}/segments/0/leagues/{league_id}"
-    return f"{API_HOST}{path}?{urlencode([('view', view) for view in views])}"
+    return f"{ESPN_API_HOST}{path}?{urlencode([('view', view) for view in views])}"
 
 
 def fetch_league_data(season: int, league_id: int, *, timeout: int = 30) -> dict:
