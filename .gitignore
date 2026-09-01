@@ -43,3 +43,9 @@ fantasy_football/__sandbox__/
 scratch/
 *dump*
 plans/
+
+# Local league configuration
+config/leagues.toml
+
+
+data/*.sqlite

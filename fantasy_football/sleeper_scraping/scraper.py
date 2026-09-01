@@ -8,6 +8,7 @@ from fantasy_football.storage import (
     DEFAULT_INTERVAL_SECONDS,
     DEFAULT_RETRY_SECONDS,
     write_snapshot,
+    write_sqlite_snapshot,
 )
 
 from .client import fetch_league_data
@@ -28,7 +29,16 @@ def main(
             week = data["week"]
             path = get_results_file(season, week, f"sleeper_{league_id}")
             path.parent.mkdir(parents=True, exist_ok=True)
-            rows = write_snapshot(path, matchup_rows(data, matchup_period=week))
+            frame = matchup_rows(data, matchup_period=week)
+            rows = write_snapshot(path, frame)
+            write_sqlite_snapshot(
+                frame,
+                provider="sleeper",
+                league_id=league_id,
+                season=season,
+                matchup_period=week,
+                data=data,
+            )
             logging.info("Sleeper scrape complete; wrote %s row(s) to %s", rows, path)
             if once:
                 return
@@ -38,3 +48,6 @@ def main(
             if once:
                 raise
             time.sleep(retry_seconds)
+
+
+

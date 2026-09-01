@@ -9,9 +9,10 @@ from fantasy_football.storage import (
     DEFAULT_INTERVAL_SECONDS,
     DEFAULT_RETRY_SECONDS,
     write_snapshot,
+    write_sqlite_snapshot,
 )
 
-from .client import configured_cookies, fetch_league_data
+from .client import fetch_league_data
 from .parser import current_week, matchup_rows
 
 
@@ -25,16 +26,22 @@ def main(
 ):
     if league not in LEAGUE_IDS:
         raise ValueError(f"Unknown league '{league}'")
-    espn_s2, swid = configured_cookies()
     while True:
         try:
-            data = fetch_league_data(
-                season, LEAGUE_IDS[league], espn_s2=espn_s2, swid=swid
-            )
+            data = fetch_league_data(season, LEAGUE_IDS[league])
             week = current_week(data)
             path = get_results_file(season, week, league)
             path.parent.mkdir(parents=True, exist_ok=True)
-            rows = write_snapshot(path, matchup_rows(data, matchup_period=week))
+            frame = matchup_rows(data, matchup_period=week)
+            rows = write_snapshot(path, frame)
+            write_sqlite_snapshot(
+                frame,
+                provider="espn",
+                league_id=LEAGUE_IDS[league],
+                season=season,
+                matchup_period=week,
+                data=data,
+            )
             logging.info("ESPN scrape complete; wrote %s row(s) to %s", rows, path)
             if once:
                 return
@@ -44,3 +51,6 @@ def main(
             if once:
                 raise
             time.sleep(retry_seconds)
+
+
+from .client import fetch_league_data

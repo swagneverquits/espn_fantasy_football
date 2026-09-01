@@ -5,6 +5,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 API_HOST = "https://api.sleeper.app/v1"
+DATA_HOST = "https://api.sleeper.com"
 
 
 class SleeperAPIError(RuntimeError):
@@ -29,6 +30,36 @@ def fetch_json(path: str, *, timeout: int = 30):
         raise SleeperAPIError("Sleeper API returned invalid JSON") from exc
 
 
+def fetch_data_json(path: str, *, timeout: int = 30):
+    """Fetch player stats/projections from Sleeper's data API."""
+    try:
+        with urlopen(
+            Request(
+                f"{DATA_HOST}{path}",
+                headers={"User-Agent": "Fantasy Football collector"},
+            ),
+            timeout=timeout,
+        ) as response:
+            return json.load(response)
+    except HTTPError as exc:
+        raise SleeperAPIError(f"Sleeper data API returned HTTP {exc.code}") from exc
+    except URLError as exc:
+        raise SleeperAPIError(
+            f"Could not reach Sleeper data API: {exc.reason}"
+        ) from exc
+    except ValueError as exc:
+        raise SleeperAPIError("Sleeper data API returned invalid JSON") from exc
+
+
+def fetch_weekly_player_data(sport: str, season: int, week: int):
+    """Fetch the raw weekly stats and projections used by the web app."""
+    suffix = f"/{sport}/{season}/{week}?season_type=regular"
+    return {
+        "stats": fetch_data_json(f"/stats{suffix}"),
+        "projections": fetch_data_json(f"/projections{suffix}"),
+    }
+
+
 def fetch_league_data(league_id: str):
     """Fetch league metadata, users, rosters, and the current NFL week."""
     league = fetch_json(f"/league/{league_id}")
@@ -37,10 +68,12 @@ def fetch_league_data(league_id: str):
     state = fetch_json("/state/nfl")
     week = int(state["week"])
     matchups = fetch_json(f"/league/{league_id}/matchups/{week}")
+    player_data = fetch_weekly_player_data(league["sport"], int(league["season"]), week)
     return {
         "league": league,
         "users": users,
         "rosters": rosters,
         "matchups": matchups,
         "week": week,
+        "player_data": player_data,
     }

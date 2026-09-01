@@ -6,7 +6,6 @@ dependencies:
   - matplotlib
   - numpy
   - pandas
-  - python-dotenv
   - seaborn
   - black
   - isort

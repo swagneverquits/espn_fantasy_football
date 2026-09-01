@@ -1,7 +1,6 @@
 """Small client for ESPN's Fantasy Football league JSON endpoint."""
 
 import json
-import os
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -27,18 +26,8 @@ def build_league_url(season: int, league_id: int, views=DEFAULT_VIEWS) -> str:
     return f"{API_HOST}{path}?{urlencode([('view', view) for view in views])}"
 
 
-def fetch_league_data(
-    season: int, league_id: int, *, timeout: int = 30, espn_s2=None, swid=None
-) -> dict:
+def fetch_league_data(season: int, league_id: int, *, timeout: int = 30) -> dict:
     headers = {"User-Agent": "Mozilla/5.0 (Fantasy Football collector)"}
-    cookies = []
-    if espn_s2:
-        cookies.append(f"espn_s2={espn_s2}")
-    if swid:
-        cookies.append(f"SWID={swid}")
-    if cookies:
-        headers["Cookie"] = "; ".join(cookies)
-
     try:
         with urlopen(
             Request(build_league_url(season, league_id), headers=headers),
@@ -63,5 +52,3 @@ def fetch_league_data(
     return data
 
 
-def configured_cookies():
-    return os.getenv("ESPN_S2"), os.getenv("ESPN_SWID") or os.getenv("SWID")
