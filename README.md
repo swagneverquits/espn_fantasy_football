@@ -32,7 +32,7 @@ Copy-Item config/leagues.toml.example config/leagues.toml
 
 Edit `config/leagues.toml` with the leagues to track. The local file is ignored by Git. League IDs are numeric TOML values.
 
-For local writes, Parquet objects are saved under `results/parquet`. On the server, set `GCS_BUCKET` and authenticate with Google Application Default Credentials; the scraper uploads each completed object directly to that bucket.
+For local writes, `.pq` Parquet objects are saved under `results/parquet`. On the server, set `GCS_BUCKET` and authenticate with Google Application Default Credentials; the scraper uploads each completed object directly to that bucket.
 
 ## Collect data
 
@@ -66,6 +66,12 @@ python scripts/run.py analyze --provider espn --season 2026 --week 1 --league ex
 ```
 
 For Sleeper, use the configured TOML league name and `--provider sleeper`. Plots are written to `results/plots/<season>/<league>/week_<week>/`.
+
+Compact a completed week in GCS. The five compacted `.pq` files are written directly under the week prefix; raw polling objects are retained:
+
+```powershell
+python scripts/run.py compact --bucket YOUR_BUCKET --provider espn --league-id YOUR_LEAGUE_ID --season 2026 --week 1
+```
 
 ## Checks
 

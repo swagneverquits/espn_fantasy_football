@@ -281,14 +281,21 @@ def load_matchup_results_from_parquet(
         / f"season={season}"
         / f"week={matchup_period}"
     )
-    snapshot_files = sorted((prefix / "team_snapshots").glob("*.parquet"))
+
+    def files_for(table: str) -> list[Path]:
+        compacted = [path for path in (prefix / f"{table}.pq",) if path.exists()]
+        if compacted:
+            return compacted
+        return sorted((prefix / table).glob("*.pq"))
+
+    snapshot_files = files_for("team_snapshots")
     if not snapshot_files:
         raise FileNotFoundError(f"No Parquet snapshots found under {prefix}")
     snapshots = pd.concat(
         (pd.read_parquet(path) for path in snapshot_files), ignore_index=True
     )
-    team_files = sorted((prefix / "team_metadata").glob("*.parquet"))
-    league_files = sorted((prefix / "league_metadata").glob("*.parquet"))
+    team_files = files_for("team_metadata")
+    league_files = files_for("league_metadata")
     if team_files:
         teams = pd.concat(
             (pd.read_parquet(path) for path in team_files), ignore_index=True

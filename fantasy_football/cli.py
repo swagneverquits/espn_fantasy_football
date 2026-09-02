@@ -11,6 +11,7 @@ from pathlib import Path
 
 from fantasy_football.analysis.plotting import generate_matchup_plots
 from fantasy_football.config import ESPN_LEAGUES, SLEEPER_LEAGUES
+from fantasy_football.compaction import compact_gcs_week
 from fantasy_football.constants import (
     DEFAULT_INTERVAL_SECONDS,
     DEFAULT_RETRY_SECONDS,
@@ -59,6 +60,14 @@ def build_parser() -> argparse.ArgumentParser:
     sync.add_argument("--season", type=int, required=True)
     sync.add_argument("--week", type=int, required=True)
     sync.add_argument("--output-dir", type=Path, default=PARQUET_DIR)
+    compact = commands.add_parser(
+        "compact", help="Compact one GCS league/week into Parquet objects."
+    )
+    compact.add_argument("--bucket", required=True)
+    compact.add_argument("--provider", choices=("espn", "sleeper"), required=True)
+    compact.add_argument("--league-id", required=True)
+    compact.add_argument("--season", type=int, required=True)
+    compact.add_argument("--week", type=int, required=True)
 
     return parser
 
@@ -144,6 +153,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             output_dir=args.output_dir,
         )
         logging.info("Downloaded %d Parquet objects", count)
+    elif args.command == "compact":
+        outputs = compact_gcs_week(
+            args.bucket,
+            provider=args.provider,
+            league_id=args.league_id,
+            season=args.season,
+            matchup_period=args.week,
+        )
+        logging.info("Wrote %d compacted Parquet objects", len(outputs))
     else:
         for path in generate_matchup_plots(
             args.season, args.week, args.league, args.provider

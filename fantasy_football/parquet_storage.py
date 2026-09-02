@@ -59,9 +59,9 @@ class ParquetObjectStore:
         """Write and upload one uniquely named Parquet object."""
         object_name = (
             f"provider={provider}/league={league_id}/season={season}/"
-            f"week={matchup_period}/{table}/timestamp={timestamp}.parquet"
+            f"week={matchup_period}/{table}/timestamp={timestamp}.pq"
         )
-        with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as file:
+        with tempfile.NamedTemporaryFile(suffix=".pq", delete=False) as file:
             temporary_path = Path(file.name)
         try:
             frame.to_parquet(temporary_path, index=False, compression="zstd")

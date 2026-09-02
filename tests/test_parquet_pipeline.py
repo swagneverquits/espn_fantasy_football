@@ -49,7 +49,7 @@ class ParquetPipelineTests(unittest.TestCase):
                 matchup_period=1,
                 data=data,
             )
-            first_files = list(root.rglob("*.parquet"))
+            first_files = list(root.rglob("*.pq"))
             writer.write(
                 frame(pd.Timestamp("2026-09-02T18:00:30Z")),
                 provider="espn",
@@ -58,7 +58,7 @@ class ParquetPipelineTests(unittest.TestCase):
                 matchup_period=1,
                 data=data,
             )
-            second_files = list(root.rglob("*.parquet"))
+            second_files = list(root.rglob("*.pq"))
 
             result = load_matchup_results_from_parquet(
                 root,
