@@ -3,7 +3,7 @@
 import pandas as pd
 
 from fantasy_football.config import LEAGUE_IDS
-from fantasy_football.storage import write_sqlite_snapshot
+from fantasy_football.parquet_pipeline import configured_writer
 
 from ..base import JSONData, Scraper
 from .client import fetch_league_data
@@ -19,6 +19,7 @@ class ESPNScraper(Scraper):
         self.league = league
         self.league_id = LEAGUE_IDS[league]
         self.season = season
+        self.snapshot_writer = configured_writer()
 
     def get_league_metadata(self) -> JSONData:
         """Fetch ESPN's combined league payload."""
@@ -60,7 +61,9 @@ class ESPNScraper(Scraper):
     ) -> int:
         week = current_week(live_snapshot)
         rows = len(frame)
-        write_sqlite_snapshot(
+        if not rows:
+            return 0
+        self.snapshot_writer.write(
             frame,
             provider="espn",
             league_id=self.league_id,

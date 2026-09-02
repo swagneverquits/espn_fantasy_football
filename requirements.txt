@@ -4,3 +4,5 @@ pandas
 seaborn
 black
 isort
+pyarrow
+google-cloud-storage

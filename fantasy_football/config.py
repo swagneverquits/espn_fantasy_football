@@ -21,7 +21,9 @@ _LEAGUES = _load_leagues()
 ESPN_LEAGUES = {
     name: str(league_id) for name, league_id in _LEAGUES.get("espn", {}).items()
 }
+
 LEAGUE_IDS = {name: int(league_id) for name, league_id in ESPN_LEAGUES.items()}
+
 SLEEPER_LEAGUES = {
     name: str(league_id) for name, league_id in _LEAGUES.get("sleeper", {}).items()
 }

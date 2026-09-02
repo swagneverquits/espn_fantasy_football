@@ -1,0 +1,15 @@
+services:
+  scraper:
+    build: .
+    container_name: fantasy-football-scraper
+    restart: unless-stopped
+    init: true
+    environment:
+      TZ: America/New_York
+      GCS_BUCKET: "${GCS_BUCKET:?Set GCS_BUCKET before starting the scraper}"
+    volumes:
+      - ./config/leagues.toml:/app/config/leagues.toml:ro
+      - ./results:/app/results
+
+
+

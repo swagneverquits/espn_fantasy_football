@@ -1,24 +1,24 @@
 # Fantasy Football
 
-Tools for collecting live fantasy matchup data from ESPN and Sleeper, storing normalized snapshots in SQLite, and generating compact matchup plots.
+Tools for collecting live fantasy matchup data from ESPN and Sleeper, storing normalized 30-second snapshots as Parquet objects, and generating compact matchup plots with pandas.
 
 ## Project layout
 
 ```text
 fantasy_football/
-  constants.py          Shared paths, table names, column names, and defaults
+  constants.py          Shared paths, API endpoints, column names, and defaults
   config.py             TOML league configuration loading
-  storage.py            SQLite schema, persistence, reads, and CSV export
-  scrapers/
-    base.py             Shared scraper lifecycle and polling loop
-    espn/               ESPN client, parser, and scraper
-    sleeper/            Sleeper client, parser, and scraper
-  analysis/             Matchup normalization, plotting, and reports
+  normalization.py      Provider-specific player normalization
+  parquet_pipeline.py   Snapshot writing and local Parquet reads
+  parquet_storage.py    Local/GCS object upload implementations
+  sync.py                GCS-to-local Parquet sync
+  scrapers/             Shared scraper lifecycle plus ESPN/Sleeper implementations
+  analysis/plotting.py  Matchup plotting
 config/
   leagues.toml.example  Checked-in configuration template
-scripts/
-  run.py                Unified scraping and analysis entry point`nresults/
-  data/                 SQLite database and archived legacy data
+scripts/run.py           Unified scraping, sync, and analysis entry point
+results/
+  parquet/              Local Parquet cache used for analysis
   plots/                Generated plots
 ```
 
@@ -30,16 +30,9 @@ conda activate espn-fantasy-football
 Copy-Item config/leagues.toml.example config/leagues.toml
 ```
 
-Edit `config/leagues.toml` with the leagues to track. The local file is ignored by Git. League IDs are numeric TOML values:
+Edit `config/leagues.toml` with the leagues to track. The local file is ignored by Git. League IDs are numeric TOML values.
 
-```toml
-[espn]
-example_league = 123456789
-example_league = 123456789
-
-[sleeper]
-example_league = 123456789012345678
-```
+For local writes, Parquet objects are saved under `results/parquet`. On the server, set `GCS_BUCKET` and authenticate with Google Application Default Credentials; the scraper uploads each completed object directly to that bucket.
 
 ## Collect data
 
@@ -53,35 +46,26 @@ python scripts/run.py scrape sleeper --league-id 123456789012345678 --once
 Run continuous polling, using the shared 30-second default:
 
 ```powershell
-python scripts/run.py scrape espn --league example_league
-python scripts/run.py scrape sleeper --league-id 123456789012345678
-```
-
-The canonical database is `results/data/fantasy_football.sqlite`. The live pipeline writes directly to SQLite; CSVs are only produced explicitly for inspection/export.
-
-The database contains:
-
-- `league_metadata` � league identity and names
-- `team_metadata` � weekly team names and logos
-- `player_metadata` � player names and positions
-- `team_snapshots` � live scores, projections, and win probabilities
-- `player_snapshots` � live player points and projections
-
-Run every league configured in `config/leagues.toml` in parallel:
-
-```powershell
 python scripts/run.py scrape all
-python scripts/run.py scrape all --once
 ```
-## Generate plots
 
-The current report command reads from SQLite and supports configured ESPN leagues:
+Each poll writes one `team_snapshots` object and one `player_snapshots` object per league/week. Metadata objects are written only on the first poll or when their values change. Object paths are partitioned by provider, league, season, week, table, and Unix timestamp.
+
+## Local analysis
+
+Download one league/week from GCS into the local Parquet cache:
 
 ```powershell
-python scripts/run.py analyze --season 2026 --week 1 --league example_league
+python scripts/run.py sync --bucket YOUR_BUCKET --provider espn --league-id 123456789 --season 2026 --week 1
 ```
 
-Plots are written to `results/plots/<season>/<league>/week_<week>/`.
+Generate plots from local Parquet with pandas:
+
+```powershell
+python scripts/run.py analyze --provider espn --season 2026 --week 1 --league example_league
+```
+
+For Sleeper, use the configured TOML league name and `--provider sleeper`. Plots are written to `results/plots/<season>/<league>/week_<week>/`.
 
 ## Checks
 

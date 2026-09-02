@@ -11,9 +11,14 @@ from pathlib import Path
 
 from fantasy_football.analysis.plotting import generate_matchup_plots
 from fantasy_football.config import ESPN_LEAGUES, SLEEPER_LEAGUES
-from fantasy_football.constants import DEFAULT_INTERVAL_SECONDS, DEFAULT_RETRY_SECONDS
+from fantasy_football.constants import (
+    DEFAULT_INTERVAL_SECONDS,
+    DEFAULT_RETRY_SECONDS,
+    PARQUET_DIR,
+)
 from fantasy_football.scrapers.espn.scraper import main as run_espn
 from fantasy_football.scrapers.sleeper.scraper import main as run_sleeper
+from fantasy_football.sync import sync_parquet_prefix
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -40,10 +45,21 @@ def build_parser() -> argparse.ArgumentParser:
         "all", help="Scrape all configured leagues in parallel."
     )
     _add_polling_args(all_leagues)
-    analyze = commands.add_parser("analyze", help="Generate matchup plots from SQLite.")
+    analyze = commands.add_parser(
+        "analyze", help="Generate matchup plots from local Parquet data."
+    )
     analyze.add_argument("--season", type=int, required=True)
     analyze.add_argument("--week", type=int, required=True)
     analyze.add_argument("--league", required=True)
+    analyze.add_argument("--provider", choices=("espn", "sleeper"), default="espn")
+    sync = commands.add_parser("sync", help="Download one league/week from GCS.")
+    sync.add_argument("--bucket", required=True)
+    sync.add_argument("--provider", choices=("espn", "sleeper"), required=True)
+    sync.add_argument("--league-id", required=True)
+    sync.add_argument("--season", type=int, required=True)
+    sync.add_argument("--week", type=int, required=True)
+    sync.add_argument("--output-dir", type=Path, default=PARQUET_DIR)
+
     return parser
 
 
@@ -118,8 +134,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         run_sleeper(league_id=args.league_id, **_polling_args(args))
     elif args.command == "scrape" and args.provider == "all":
         return _run_all(args)
+    elif args.command == "sync":
+        count = sync_parquet_prefix(
+            args.bucket,
+            provider=args.provider,
+            league_id=args.league_id,
+            season=args.season,
+            matchup_period=args.week,
+            output_dir=args.output_dir,
+        )
+        logging.info("Downloaded %d Parquet objects", count)
     else:
-        for path in generate_matchup_plots(args.season, args.week, args.league):
+        for path in generate_matchup_plots(
+            args.season, args.week, args.league, args.provider
+        ):
             print(path)
     return 0
 

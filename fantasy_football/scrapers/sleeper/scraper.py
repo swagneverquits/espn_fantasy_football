@@ -4,7 +4,7 @@ from typing import Any
 
 import pandas as pd
 
-from fantasy_football.storage import write_sqlite_snapshot
+from fantasy_football.parquet_pipeline import configured_writer
 
 from ..base import JSONData, Scraper
 from .client import fetch_json, fetch_weekly_player_data
@@ -18,6 +18,7 @@ class SleeperScraper(Scraper):
         self.league_id = str(league_id)
         self.season = season
         self._weekly_metadata: JSONData | None = None
+        self.snapshot_writer = configured_writer()
 
     def get_league_metadata(self) -> JSONData:
         """Fetch league identity and users once for this scraper run."""
@@ -77,7 +78,9 @@ class SleeperScraper(Scraper):
         data = {**league_metadata, "rosters": team_metadata, **live_snapshot}
         week = data["week"]
         rows = len(frame)
-        write_sqlite_snapshot(
+        if not rows:
+            return 0
+        self.snapshot_writer.write(
             frame,
             provider="sleeper",
             league_id=self.league_id,

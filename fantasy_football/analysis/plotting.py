@@ -30,9 +30,9 @@ from fantasy_football.analysis.constants import (
     TIME_COL,
     WIN_CHANCE_COL,
 )
-from fantasy_football.config import LEAGUE_IDS
-from fantasy_football.constants import PLOTS_DIR, SQLITE_PATH
-from fantasy_football.storage import load_matchup_results
+from fantasy_football.config import ESPN_LEAGUES, SLEEPER_LEAGUES
+from fantasy_football.constants import PARQUET_DIR, PLOTS_DIR
+from fantasy_football.parquet_pipeline import load_matchup_results_from_parquet
 
 
 def plot_matchup(
@@ -216,18 +216,21 @@ def normalize_team_names(matchup_df: pd.DataFrame) -> pd.DataFrame:
     return pd.concat(updated).sort_index()
 
 
-def generate_matchup_plots(season: int, week: int, league: str) -> list[Path]:
+def generate_matchup_plots(
+    season: int, week: int, league: str, provider: str = "espn"
+) -> list[Path]:
     """Generate one common-format plot per matchup in a league week."""
-    if league not in LEAGUE_IDS:
-        valid_leagues = ", ".join(sorted(LEAGUE_IDS))
+    leagues = ESPN_LEAGUES if provider == "espn" else SLEEPER_LEAGUES
+    if league not in leagues:
+        valid_leagues = ", ".join(sorted(leagues))
         raise ValueError(f"Unknown league '{league}'. Expected one of: {valid_leagues}")
 
     output_dir = PLOTS_DIR / str(season) / league / f"week_{week}"
     data = normalize_team_names(
-        load_matchup_results(
-            SQLITE_PATH,
-            provider="espn",
-            league_id=LEAGUE_IDS[league],
+        load_matchup_results_from_parquet(
+            PARQUET_DIR,
+            provider=provider,
+            league_id=leagues[league],
             season=season,
             matchup_period=week,
         )

@@ -4,10 +4,9 @@ from pathlib import Path
 
 # Project paths
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-RESULTS_DIR = PROJECT_ROOT / "results" / "data"
-PLOTS_DIR = PROJECT_ROOT / "results" / "plots"
-SQLITE_PATH = RESULTS_DIR / "fantasy_football.sqlite"
 LEAGUE_CONFIG_PATH = PROJECT_ROOT / "config" / "leagues.toml"
+PARQUET_DIR = PROJECT_ROOT / "results" / "parquet"
+PLOTS_DIR = PROJECT_ROOT / "results" / "plots"
 
 # Runtime defaults
 DEFAULT_INTERVAL_SECONDS = 30
@@ -27,10 +26,3 @@ MATCHUP_ID_COL = "matchup_id"
 TIMESTAMP_COL = "timestamp"
 TEAM_ID_COL = "team_id"
 COMMON_INDEX_COLS = (PROVIDER_COL, LEAGUE_ID_COL, SEASON_COL)
-
-# SQLite table names
-TEAM_SNAPSHOTS_TABLE = "team_snapshots"
-PLAYER_SNAPSHOTS_TABLE = "player_snapshots"
-TEAM_METADATA_TABLE = "team_metadata"
-LEAGUE_METADATA_TABLE = "league_metadata"
-PLAYER_METADATA_TABLE = "player_metadata"
