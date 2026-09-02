@@ -1,4 +1,4 @@
-"""Compact matchup plots for API snapshot data."""
+"""Prepare and generate compact matchup plots from SQLite snapshots."""
 
 import textwrap
 from collections.abc import Iterable
@@ -9,10 +9,23 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from matplotlib.font_manager import FontProperties
 
-TEAM_COLORS = ("#d49a00", "#5b2a86")
-EMOJI_FONT = FontProperties(fname=r"C:\Windows\Fonts\seguiemj.ttf")
-MAIN_TITLE_SIZE, AXIS_TITLE_SIZE = 17, 12.5
-DATE_SIZE, TICK_SIZE, HOUR_SIZE = 11.5, 9.5, 9
+from fantasy_football.analysis.constants import (
+    ANNOTATION_SIZE,
+    AXIS_TITLE_SIZE,
+    DATE_SIZE,
+    DEFAULT_GAME_DAYS,
+    EDGE_LIMIT,
+    EDGE_TICK_LABELS,
+    EDGE_TICKS,
+    EMOJI_FONT,
+    HOUR_SIZE,
+    MAIN_TITLE_SIZE,
+    TEAM_COLORS,
+    TICK_SIZE,
+)
+from fantasy_football.config import LEAGUE_IDS
+from fantasy_football.constants import PLOTS_DIR, SQLITE_PATH
+from fantasy_football.storage import load_matchup_results
 
 
 def plot_matchup(
@@ -22,7 +35,7 @@ def plot_matchup(
     week: int | str,
     matchup: int | str,
     savepath: str | Path,
-    days: Iterable[str] = ("Thursday", "Sunday", "Monday"),
+    days: Iterable[str] = DEFAULT_GAME_DAYS,
 ) -> Path:
     """Save a compact mirrored-probability and points plot for one matchup."""
     plt.rcParams["font.family"] = "Segoe UI"
@@ -84,7 +97,7 @@ def plot_matchup(
                     alpha=0.8,
                 )
         edge_ax.set_title("")
-        edge_ax.set_ylim(-50, 50)
+        edge_ax.set_ylim(-EDGE_LIMIT, EDGE_LIMIT)
         edge_ax.set_yticks(
             [-50, -25, 0, 25, 50], labels=["100%", "75%", "Even", "75%", "100%"]
         )
@@ -143,7 +156,7 @@ def plot_matchup(
         0.055,
         "solid = realized  ·  dashed = projected",
         color="#555555",
-        fontsize=9,
+        fontsize=ANNOTATION_SIZE,
         ha="center",
         va="center",
     )
@@ -174,3 +187,56 @@ def _day_width(data: pd.DataFrame, date) -> float:
 
 def _format_date(date) -> str:
     return f"{date.month}/{date.day}" if date is not None else ""
+
+
+def normalize_team_names(matchup_df: pd.DataFrame) -> pd.DataFrame:
+    """Use the latest name for each matchup slot throughout the plot."""
+    updated = []
+    for _, matchup in matchup_df.sort_index().groupby("Matchup", group_keys=False):
+        matchup = matchup.reset_index()
+        matchup["slot"] = matchup.groupby("time").cumcount()
+        latest_names = matchup.groupby("slot").tail(1).set_index("slot")["team"]
+        matchup["team"] = matchup["slot"].map(latest_names)
+        updated.append(matchup.set_index(["time", "team"]))
+    return pd.concat(updated).sort_index()
+
+
+def generate_matchup_plots(season: int, week: int, league: str) -> list[Path]:
+    """Generate one common-format plot per matchup in a league week."""
+    if league not in LEAGUE_IDS:
+        valid_leagues = ", ".join(sorted(LEAGUE_IDS))
+        raise ValueError(f"Unknown league '{league}'. Expected one of: {valid_leagues}")
+
+    output_dir = PLOTS_DIR / str(season) / league / f"week_{week}"
+    data = normalize_team_names(
+        load_matchup_results(
+            SQLITE_PATH,
+            provider="espn",
+            league_id=LEAGUE_IDS[league],
+            season=season,
+            matchup_period=week,
+        )
+    ).reset_index()
+    matchup_ids = sorted(data["Matchup"].dropna().unique())
+    league_name = (
+        data["league_name"].dropna().iloc[0]
+        if data["league_name"].notna().any()
+        else league
+    )
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    paths = []
+    for matchup_number, matchup_id in enumerate(matchup_ids, start=1):
+        matchup = data[data["Matchup"].eq(matchup_id)].copy()
+        days = list(pd.to_datetime(matchup["time"]).dt.day_name().drop_duplicates())
+        path = output_dir / f"matchup{matchup_number}.png"
+        plot_matchup(
+            matchup,
+            league_name=league_name,
+            week=week,
+            matchup=matchup_number,
+            days=days,
+            savepath=path,
+        )
+        paths.append(path)
+    return paths

@@ -9,7 +9,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from fantasy_football.analysis.reports import generate_matchup_plots
+from fantasy_football.analysis.plotting import generate_matchup_plots
 from fantasy_football.config import ESPN_LEAGUES, SLEEPER_LEAGUES
 from fantasy_football.constants import DEFAULT_INTERVAL_SECONDS, DEFAULT_RETRY_SECONDS
 from fantasy_football.scrapers.espn.scraper import main as run_espn

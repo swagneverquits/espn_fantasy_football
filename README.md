@@ -17,10 +17,7 @@ fantasy_football/
 config/
   leagues.toml.example  Checked-in configuration template
 scripts/
-  run_api_scraper.py    ESPN polling entry point
-  run_sleeper_scraper.py Sleeper polling entry point
-  run_analysis.py       ESPN plot-generation entry point
-results/
+  run.py                Unified scraping and analysis entry point`nresults/
   data/                 SQLite database and archived legacy data
   plots/                Generated plots
 ```
@@ -37,11 +34,11 @@ Edit `config/leagues.toml` with the leagues to track. The local file is ignored 
 
 ```toml
 [espn]
-college = 1850396491
-high_school = 1012938436
+example_league = 123456789
+example_league = 123456789
 
 [sleeper]
-football_jawn_dynasty = 1313543921472651264
+example_league = 123456789012345678
 ```
 
 ## Collect data
@@ -49,39 +46,39 @@ football_jawn_dynasty = 1313543921472651264
 Run one scrape:
 
 ```powershell
-python scripts/run_api_scraper.py --league high_school --once
-python scripts/run_sleeper_scraper.py --league-id 1313543921472651264 --once
+python scripts/run.py scrape espn --league example_league --once
+python scripts/run.py scrape sleeper --league-id 123456789012345678 --once
 ```
 
 Run continuous polling, using the shared 30-second default:
 
 ```powershell
-python scripts/run_api_scraper.py --league high_school
-python scripts/run_sleeper_scraper.py --league-id 1313543921472651264
+python scripts/run.py scrape espn --league example_league
+python scripts/run.py scrape sleeper --league-id 123456789012345678
 ```
 
 The canonical database is `results/data/fantasy_football.sqlite`. The live pipeline writes directly to SQLite; CSVs are only produced explicitly for inspection/export.
 
 The database contains:
 
-- `league_metadata` — league identity and names
-- `team_metadata` — weekly team names and logos
-- `player_metadata` — player names and positions
-- `team_snapshots` — live scores, projections, and win probabilities
-- `player_snapshots` — live player points and projections
+- `league_metadata` ï¿½ league identity and names
+- `team_metadata` ï¿½ weekly team names and logos
+- `player_metadata` ï¿½ player names and positions
+- `team_snapshots` ï¿½ live scores, projections, and win probabilities
+- `player_snapshots` ï¿½ live player points and projections
 
 Run every league configured in `config/leagues.toml` in parallel:
 
 ```powershell
-python scripts/run_all_scrapers.py
-python scripts/run_all_scrapers.py --once
+python scripts/run.py scrape all
+python scripts/run.py scrape all --once
 ```
 ## Generate plots
 
 The current report command reads from SQLite and supports configured ESPN leagues:
 
 ```powershell
-python scripts/run_analysis.py --season 2026 --week 1 --league high_school
+python scripts/run.py analyze --season 2026 --week 1 --league example_league
 ```
 
 Plots are written to `results/plots/<season>/<league>/week_<week>/`.

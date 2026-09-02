@@ -2,7 +2,7 @@ import unittest
 
 import pandas as pd
 
-from fantasy_football.analysis.transform import normalize_team_names
+from fantasy_football.analysis.plotting import normalize_team_names
 
 
 class CoreTests(unittest.TestCase):

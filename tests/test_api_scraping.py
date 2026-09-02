@@ -51,8 +51,9 @@ class APIScrapingTests(unittest.TestCase):
         }
 
     def test_build_league_url_repeats_views(self):
-        url = build_league_url(2026, 1975629525, ("mMatchup", "mScoreboard"))
-        self.assertIn("seasons/2026/segments/0/leagues/1975629525", url)
+        league_id = 123456789
+        url = build_league_url(2026, league_id, ("mMatchup", "mScoreboard"))
+        self.assertIn(f"seasons/2026/segments/0/leagues/{league_id}", url)
         self.assertEqual(url.count("view="), 2)
 
     def test_current_week_uses_status(self):
