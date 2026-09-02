@@ -19,9 +19,16 @@ from fantasy_football.analysis.constants import (
     EDGE_TICKS,
     EMOJI_FONT,
     HOUR_SIZE,
+    LEAGUE_NAME_COL,
     MAIN_TITLE_SIZE,
+    MATCHUP_COL,
+    PROJECTED_COL,
+    SCORE_COL,
+    TEAM_COL,
     TEAM_COLORS,
     TICK_SIZE,
+    TIME_COL,
+    WIN_CHANCE_COL,
 )
 from fantasy_football.config import LEAGUE_IDS
 from fantasy_football.constants import PLOTS_DIR, SQLITE_PATH
@@ -38,17 +45,19 @@ def plot_matchup(
     days: Iterable[str] = DEFAULT_GAME_DAYS,
 ) -> Path:
     """Save a compact mirrored-probability and points plot for one matchup."""
+    # Normalize the input and identify the two teams and game-day windows.
     plt.rcParams["font.family"] = "Segoe UI"
     data = matchup_df.copy()
-    data["time"] = pd.to_datetime(data["time"])
+    data[TIME_COL] = pd.to_datetime(data[TIME_COL])
     data = data.sort_values("time")
-    teams = list(data["team"].drop_duplicates())[:2]
+    teams = list(data[TEAM_COL].drop_duplicates())[:2]
     if len(teams) != 2:
         raise ValueError("matchup_df must contain exactly two teams")
     day_names = list(days)
     day_dates = {day: _date_for_day(data, day) for day in day_names}
     widths = [_day_width(data, day_dates[day]) for day in day_names]
-    frames = [data[data["team"].eq(team)].set_index("time") for team in teams]
+    frames = [data[data[TEAM_COL].eq(team)].set_index("time") for team in teams]
+    # Create aligned Edge and Points panels for each game day.
     fig, axes = plt.subplots(
         2,
         len(day_names),
@@ -69,12 +78,13 @@ def plot_matchup(
         y=0.97,
         ha="left",
     )
+    # Render each day independently so discontinuities remain visible.
     for col, day in enumerate(day_names):
         date = day_dates[day]
         edge_ax, points_ax = axes[0, col], axes[1, col]
         edge_data = frames[0][frames[0].index.date == date]
         if not edge_data.empty:
-            edge = (edge_data["WinChance"] - 0.5) * 100
+            edge = (edge_data[WIN_CHANCE_COL] - 0.5) * 100
             x = edge_data.index
             edge_ax.fill_between(
                 x, 0, edge, where=edge >= 0, color=TEAM_COLORS[0], alpha=0.85
@@ -96,6 +106,7 @@ def plot_matchup(
                     ls="--",
                     alpha=0.8,
                 )
+        # Apply shared scales, grids, spines, and date-axis formatting.
         edge_ax.set_title("")
         edge_ax.set_ylim(-EDGE_LIMIT, EDGE_LIMIT)
         edge_ax.set_yticks(
@@ -121,12 +132,13 @@ def plot_matchup(
             fontweight="medium",
             labelpad=6,
         )
-        day_data = data[data["time"].dt.date == date]
+        day_data = data[data[TIME_COL].dt.date == date]
         if not day_data.empty:
-            edge_ax.set_xlim(day_data["time"].min(), day_data["time"].max())
-            points_ax.set_xlim(day_data["time"].min(), day_data["time"].max())
+            edge_ax.set_xlim(day_data[TIME_COL].min(), day_data[TIME_COL].max())
+            points_ax.set_xlim(day_data[TIME_COL].min(), day_data[TIME_COL].max())
         edge_ax.grid(axis="x", color="#ededed", lw=0.5)
         points_ax.grid(axis="x", color="#ededed", lw=0.5)
+    # Add matchup-level team labels and the realized/projected legend.
     fig.text(
         0.5,
         0.80,
@@ -139,6 +151,7 @@ def plot_matchup(
         ha="center",
         linespacing=1.05,
     )
+    # Add matchup-level team labels and the realized/projected legend.
     fig.text(
         0.5,
         0.53,
@@ -151,6 +164,7 @@ def plot_matchup(
         ha="center",
         linespacing=1.05,
     )
+    # Add matchup-level team labels and the realized/projected legend.
     fig.text(
         0.5,
         0.055,
@@ -160,6 +174,7 @@ def plot_matchup(
         ha="center",
         va="center",
     )
+    # Label the shared y-axes and save the finished figure.
     axes[0, 0].set_ylabel("Edge", fontsize=AXIS_TITLE_SIZE, fontweight="bold")
     axes[1, 0].set_ylabel("Points", fontsize=AXIS_TITLE_SIZE, fontweight="bold")
     output = Path(savepath)
@@ -170,14 +185,14 @@ def plot_matchup(
 
 
 def _date_for_day(data: pd.DataFrame, day: str):
-    matches = data[data["time"].dt.day_name().eq(day)]
+    matches = data[data[TIME_COL].dt.day_name().eq(day)]
     return matches["time"].dt.date.iloc[0] if not matches.empty else None
 
 
 def _day_width(data: pd.DataFrame, date) -> float:
     if date is None:
         return 1.0
-    day = data[data["time"].dt.date == date]
+    day = data[data[TIME_COL].dt.date == date]
     return (
         max((day["time"].max() - day["time"].min()).total_seconds(), 1.0)
         if not day.empty
@@ -194,9 +209,9 @@ def normalize_team_names(matchup_df: pd.DataFrame) -> pd.DataFrame:
     updated = []
     for _, matchup in matchup_df.sort_index().groupby("Matchup", group_keys=False):
         matchup = matchup.reset_index()
-        matchup["slot"] = matchup.groupby("time").cumcount()
-        latest_names = matchup.groupby("slot").tail(1).set_index("slot")["team"]
-        matchup["team"] = matchup["slot"].map(latest_names)
+        matchup["slot"] = matchup.groupby(TIME_COL).cumcount()
+        latest_names = matchup.groupby("slot").tail(1).set_index("slot")[TEAM_COL]
+        matchup[TEAM_COL] = matchup["slot"].map(latest_names)
         updated.append(matchup.set_index(["time", "team"]))
     return pd.concat(updated).sort_index()
 
@@ -217,18 +232,18 @@ def generate_matchup_plots(season: int, week: int, league: str) -> list[Path]:
             matchup_period=week,
         )
     ).reset_index()
-    matchup_ids = sorted(data["Matchup"].dropna().unique())
+    matchup_ids = sorted(data[MATCHUP_COL].dropna().unique())
     league_name = (
-        data["league_name"].dropna().iloc[0]
-        if data["league_name"].notna().any()
+        data[LEAGUE_NAME_COL].dropna().iloc[0]
+        if data[LEAGUE_NAME_COL].notna().any()
         else league
     )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     paths = []
     for matchup_number, matchup_id in enumerate(matchup_ids, start=1):
-        matchup = data[data["Matchup"].eq(matchup_id)].copy()
-        days = list(pd.to_datetime(matchup["time"]).dt.day_name().drop_duplicates())
+        matchup = data[data[MATCHUP_COL].eq(matchup_id)].copy()
+        days = list(pd.to_datetime(matchup[TIME_COL]).dt.day_name().drop_duplicates())
         path = output_dir / f"matchup{matchup_number}.png"
         plot_matchup(
             matchup,

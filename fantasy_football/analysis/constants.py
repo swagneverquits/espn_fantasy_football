@@ -15,6 +15,14 @@ TICK_SIZE = 9.5
 HOUR_SIZE = 9
 ANNOTATION_SIZE = 9
 
+# Normalized plotting columns
+TIME_COL = "time"
+TEAM_COL = "team"
+MATCHUP_COL = "Matchup"
+SCORE_COL = "Score"
+PROJECTED_COL = "Projected"
+WIN_CHANCE_COL = "WinChance"
+LEAGUE_NAME_COL = "league_name"
 # Edge-axis scale
 EDGE_LIMIT = 50
 EDGE_TICKS = (-50, -25, 0, 25, 50)
