@@ -1,0 +1,7 @@
+[espn]
+# Replace this placeholder with your ESPN league ID.
+example_league = 123456789
+
+[sleeper]
+# Replace this placeholder with your Sleeper league ID.
+example_league = 123456789012345678
