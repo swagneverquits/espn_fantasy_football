@@ -98,9 +98,11 @@ def main(
     interval_seconds: int = 30,
     retry_seconds: int = 30,
     once: bool = False,
+    schedule_gate: bool = True,
 ):
     return SleeperScraper(league_id, season=season).run(
         interval_seconds=interval_seconds,
         retry_seconds=retry_seconds,
         once=once,
+        schedule_gate=schedule_gate,
     )

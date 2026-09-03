@@ -11,6 +11,9 @@ PLOTS_DIR = PROJECT_ROOT / "results" / "plots"
 # Runtime defaults
 DEFAULT_INTERVAL_SECONDS = 30
 DEFAULT_RETRY_SECONDS = 30
+DEFAULT_SCHEDULE_REFRESH_SECONDS = 15 * 60
+DEFAULT_PREGAME_BUFFER_SECONDS = 15 * 60
+DEFAULT_GAME_WINDOW_SECONDS = 4 * 60 * 60
 
 # External service endpoints
 ESPN_API_HOST = "https://lm-api-reads.fantasy.espn.com"

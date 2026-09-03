@@ -10,8 +10,8 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from fantasy_football.analysis.plotting import generate_matchup_plots
-from fantasy_football.config import ESPN_LEAGUES, SLEEPER_LEAGUES
 from fantasy_football.compaction import compact_gcs_week
+from fantasy_football.config import ESPN_LEAGUES, SLEEPER_LEAGUES
 from fantasy_football.constants import (
     DEFAULT_INTERVAL_SECONDS,
     DEFAULT_RETRY_SECONDS,
@@ -29,6 +29,7 @@ def _add_polling_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--interval", type=int, default=DEFAULT_INTERVAL_SECONDS)
     parser.add_argument("--retry-interval", type=int, default=DEFAULT_RETRY_SECONDS)
     parser.add_argument("--once", action="store_true")
+    parser.add_argument("--no-schedule-gate", action="store_true")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -78,6 +79,7 @@ def _polling_args(args: argparse.Namespace) -> dict[str, object]:
         "interval_seconds": args.interval,
         "retry_seconds": args.retry_interval,
         "once": args.once,
+        "schedule_gate": not args.no_schedule_gate,
     }
 
 
@@ -92,6 +94,8 @@ def _run_all(args: argparse.Namespace) -> int:
     ]
     if args.once:
         common.append("--once")
+    if args.no_schedule_gate:
+        common.append("--no-schedule-gate")
     commands = []
     for league in ESPN_LEAGUES:
         commands.append(

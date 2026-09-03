@@ -80,3 +80,7 @@ python -m unittest discover -s tests -v
 black fantasy_football scripts tests
 isort fantasy_football scripts tests
 ```
+
+### Schedule gate
+
+By default, polling is schedule-gated: the scraper starts 15 minutes before each NFL kickoff and remains active for four hours after it. Overlapping windows are merged, and gaps between game windows are left idle. Use --no-schedule-gate for continuous polling during debugging; --once always bypasses the gate.
