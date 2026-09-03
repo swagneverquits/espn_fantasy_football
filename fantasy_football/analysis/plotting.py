@@ -1,4 +1,4 @@
-"""Prepare and generate compact matchup plots from SQLite snapshots."""
+"""Prepare and generate compact matchup plots from Parquet snapshots."""
 
 import textwrap
 from collections.abc import Iterable
@@ -49,7 +49,7 @@ def plot_matchup(
     plt.rcParams["font.family"] = "Segoe UI"
     data = matchup_df.copy()
     data[TIME_COL] = pd.to_datetime(data[TIME_COL])
-    data = data.sort_values("time")
+    data = data.sort_values(TIME_COL)
     teams = list(data[TEAM_COL].drop_duplicates())[:2]
     if len(teams) != 2:
         raise ValueError("matchup_df must contain exactly two teams")
@@ -97,10 +97,10 @@ def plot_matchup(
         for frame, color in zip(frames, TEAM_COLORS):
             day_data = frame[frame.index.date == date]
             if not day_data.empty:
-                points_ax.plot(day_data.index, day_data["Score"], color=color, lw=2.0)
+                points_ax.plot(day_data.index, day_data[SCORE_COL], color=color, lw=2.0)
                 points_ax.plot(
                     day_data.index,
-                    day_data["Projected"],
+                    day_data[PROJECTED_COL],
                     color=color,
                     lw=1.1,
                     ls="--",
@@ -142,7 +142,7 @@ def plot_matchup(
     fig.text(
         0.5,
         0.80,
-        f"↑ {textwrap.fill(teams[0], 28)} ↑",
+        f"\u2191 {textwrap.fill(teams[0], 28)} \u2191",
         color=TEAM_COLORS[0],
         fontsize=TICK_SIZE,
         fontweight="bold",
@@ -155,7 +155,7 @@ def plot_matchup(
     fig.text(
         0.5,
         0.53,
-        f"↓ {textwrap.fill(teams[1], 28)} ↓",
+        f"\u2193 {textwrap.fill(teams[1], 28)} \u2193",
         color=TEAM_COLORS[1],
         fontsize=TICK_SIZE,
         fontweight="bold",
@@ -168,8 +168,7 @@ def plot_matchup(
     fig.text(
         0.5,
         0.055,
-        "solid = realized  ·  dashed = projected",
-        color="#555555",
+        "solid = realized  \u00b7  dashed = projected",
         fontsize=ANNOTATION_SIZE,
         ha="center",
         va="center",
@@ -212,7 +211,7 @@ def normalize_team_names(matchup_df: pd.DataFrame) -> pd.DataFrame:
         matchup["slot"] = matchup.groupby(TIME_COL).cumcount()
         latest_names = matchup.groupby("slot").tail(1).set_index("slot")[TEAM_COL]
         matchup[TEAM_COL] = matchup["slot"].map(latest_names)
-        updated.append(matchup.set_index(["time", "team"]))
+        updated.append(matchup.set_index([TIME_COL, TEAM_COL]))
     return pd.concat(updated).sort_index()
 
 
