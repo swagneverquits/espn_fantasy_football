@@ -11,3 +11,4 @@ dependencies:
   - isort
   - pyarrow
   - google-cloud-storage
+  - duckdb

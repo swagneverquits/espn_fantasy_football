@@ -32,7 +32,7 @@ from fantasy_football.analysis.constants import (
 )
 from fantasy_football.config import ESPN_LEAGUES, SLEEPER_LEAGUES
 from fantasy_football.constants import PARQUET_DIR, PLOTS_DIR
-from fantasy_football.storage.pipeline import load_matchup_results_from_parquet
+from fantasy_football.storage.duckdb import load_matchup_results
 
 
 def plot_matchup(
@@ -226,7 +226,7 @@ def generate_matchup_plots(
 
     output_dir = PLOTS_DIR / str(season) / league / f"week_{week}"
     data = normalize_team_names(
-        load_matchup_results_from_parquet(
+        load_matchup_results(
             PARQUET_DIR,
             provider=provider,
             league_id=leagues[league],

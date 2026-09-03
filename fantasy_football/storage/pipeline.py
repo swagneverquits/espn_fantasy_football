@@ -22,7 +22,7 @@ from fantasy_football.constants import (
     TEAM_ID_COL,
     TIMESTAMP_COL,
 )
-from fantasy_football.normalization import player_data, unix_seconds
+from fantasy_football.storage.normalization import player_data, unix_seconds
 from fantasy_football.storage.objects import (
     GCSObjectUploader,
     LocalObjectUploader,
@@ -279,76 +279,3 @@ def configured_writer() -> ParquetSnapshotWriter:
     else:
         logger.info("Snapshot destination: local path=%s", PARQUET_DIR)
     return build_writer(bucket=bucket)
-
-
-def load_matchup_results_from_parquet(
-    root: str | Path,
-    *,
-    provider: str,
-    league_id: str | int,
-    season: int,
-    matchup_period: int,
-) -> pd.DataFrame:
-    """Load normalized matchup rows from local Parquet objects with pandas."""
-    root = Path(root)
-    prefix = (
-        root
-        / f"provider={provider}"
-        / f"league={league_id}"
-        / f"season={season}"
-        / f"week={matchup_period}"
-    )
-
-    def files_for(table: str) -> list[Path]:
-        compacted = [path for path in (prefix / f"{table}.pq",) if path.exists()]
-        if compacted:
-            return compacted
-        return sorted((prefix / table).glob("*.pq"))
-
-    snapshot_files = files_for("team_snapshots")
-    if not snapshot_files:
-        raise FileNotFoundError(f"No Parquet snapshots found under {prefix}")
-    snapshots = pd.concat(
-        (pd.read_parquet(path) for path in snapshot_files), ignore_index=True
-    )
-    team_files = files_for("team_metadata")
-    league_files = files_for("league_metadata")
-    if team_files:
-        teams = pd.concat(
-            (pd.read_parquet(path) for path in team_files), ignore_index=True
-        )
-        teams = teams.sort_values(TIMESTAMP_COL).drop_duplicates(
-            [PROVIDER_COL, LEAGUE_ID_COL, SEASON_COL, MATCHUP_PERIOD_COL, TEAM_ID_COL],
-            keep="last",
-        )
-        snapshots = snapshots.merge(
-            teams[[TEAM_ID_COL, "team_name"]], on=TEAM_ID_COL, how="left"
-        )
-    else:
-        snapshots["team_name"] = pd.NA
-    if league_files:
-        leagues = pd.concat(
-            (pd.read_parquet(path) for path in league_files), ignore_index=True
-        )
-        league_name = (
-            leagues.sort_values(TIMESTAMP_COL)["league_name"].dropna().iloc[-1]
-        )
-    else:
-        league_name = None
-    result = pd.DataFrame(
-        {
-            "time": pd.to_datetime(
-                snapshots[TIMESTAMP_COL], unit="s", utc=True
-            ).dt.tz_convert("America/New_York"),
-            "team": snapshots["team_name"].fillna(snapshots[TEAM_ID_COL].astype(str)),
-            "Matchup": snapshots[MATCHUP_ID_COL],
-            "MatchupPeriod": snapshots[MATCHUP_PERIOD_COL],
-            "Score": snapshots["score_live"],
-            "Projected": snapshots["projected_live"],
-            "WinChance": snapshots["win_probability"],
-            "league_name": league_name,
-        }
-    )
-    return result.sort_values(
-        ["time", "Matchup", TEAM_ID_COL] if TEAM_ID_COL in result else ["time"]
-    ).set_index(["time", "team"])

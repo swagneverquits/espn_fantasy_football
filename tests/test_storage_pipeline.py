@@ -4,10 +4,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from fantasy_football.storage.pipeline import (
-    build_writer,
-    load_matchup_results_from_parquet,
-)
+from fantasy_football.storage.duckdb import load_matchup_results
+from fantasy_football.storage.pipeline import build_writer
 
 
 class ParquetPipelineTests(unittest.TestCase):
@@ -60,7 +58,7 @@ class ParquetPipelineTests(unittest.TestCase):
             )
             second_files = list(root.rglob("*.pq"))
 
-            result = load_matchup_results_from_parquet(
+            result = load_matchup_results(
                 root,
                 provider="espn",
                 league_id=123,

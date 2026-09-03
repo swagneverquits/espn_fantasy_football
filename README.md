@@ -8,8 +8,7 @@ Tools for collecting live fantasy matchup data from ESPN and Sleeper, storing no
 fantasy_football/
   constants.py          Shared paths, API endpoints, column names, and defaults
   config.py             TOML league configuration loading
-  normalization.py      Provider-specific player normalization
-  storage/              Parquet objects, snapshot pipeline, compaction, and sync
+  storage/              Raw Parquet objects, snapshot pipeline, and DuckDB queries
   scrapers/             Shared lifecycle plus ESPN, Sleeper, and schedule implementations
   analysis/plotting.py   Matchup plotting
 config/
@@ -30,7 +29,7 @@ Copy-Item config/leagues.toml.example config/leagues.toml
 
 Edit `config/leagues.toml` with the leagues to track. The local file is ignored by Git. League IDs are numeric TOML values.
 
-For local writes, `.pq` Parquet objects are saved under `results/parquet`. On the server, set `GCS_BUCKET` and authenticate with Google Application Default Credentials; the scraper uploads each completed object directly to that bucket.
+For local writes, raw `.pq` Parquet objects are saved under `results/parquet`. On the server, set `GCS_BUCKET` and authenticate with Google Application Default Credentials; the scraper uploads each completed object directly to that bucket. DuckDB reads the raw local objects for analysis; no compaction step is required.
 
 ## Collect data
 
@@ -51,13 +50,13 @@ Each poll writes one `team_snapshots` object and one `player_snapshots` object p
 
 ## Local analysis
 
-Download one league/week from GCS into the local Parquet cache:
+Incrementally download new Parquet objects from GCS into the local cache. For plotting, only the team and league tables are needed:
 
 ```powershell
-python scripts/run.py sync --bucket YOUR_BUCKET --provider espn --league-id 123456789 --season 2026 --week 1
+python scripts/run.py sync --bucket YOUR_BUCKET --provider espn --league-id 123456789 --season 2026 --week 1 --tables team_snapshots team_metadata league_metadata
 ```
 
-Generate plots from local Parquet with pandas:
+Generate plots from the local Parquet cache through DuckDB and pandas:
 
 ```powershell
 python scripts/run.py analyze --provider espn --season 2026 --week 1 --league example_league
@@ -65,11 +64,6 @@ python scripts/run.py analyze --provider espn --season 2026 --week 1 --league ex
 
 For Sleeper, use the configured TOML league name and `--provider sleeper`. Plots are written to `results/plots/<season>/<league>/week_<week>/`.
 
-Compact a completed week in GCS. The five compacted `.pq` files are written directly under the week prefix; raw polling objects are retained:
-
-```powershell
-python scripts/run.py compact --bucket YOUR_BUCKET --provider espn --league-id YOUR_LEAGUE_ID --season 2026 --week 1
-```
 
 ## Checks
 
@@ -81,4 +75,4 @@ isort fantasy_football scripts tests
 
 ### Schedule gate
 
-By default, polling is schedule-gated: the scraper starts 15 minutes before each NFL kickoff and remains active for four hours after it. Overlapping windows are merged, and gaps between game windows are left idle. Use --no-schedule-gate for continuous polling during debugging; --once always bypasses the gate.
+By default, polling is schedule-gated: the scraper starts 15 minutes before each NFL kickoff and remains active for four hours after it. Overlapping windows are merged, and gaps between game windows are left idle. Use `--no-schedule-gate` for continuous polling during debugging; `--once` always bypasses the gate.

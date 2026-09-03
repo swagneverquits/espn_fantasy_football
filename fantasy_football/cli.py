@@ -18,8 +18,7 @@ from fantasy_football.constants import (
 )
 from fantasy_football.scrapers.espn.scraper import main as run_espn
 from fantasy_football.scrapers.sleeper.scraper import main as run_sleeper
-from fantasy_football.storage.compaction import compact_gcs_week
-from fantasy_football.storage.sync import sync_parquet_prefix
+from fantasy_football.storage.sync import PARQUET_TABLES, sync_parquet_prefix
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -48,7 +47,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_polling_args(all_leagues)
     analyze = commands.add_parser(
-        "analyze", help="Generate matchup plots from local Parquet data."
+        "analyze", help="Generate matchup plots from local DuckDB/Parquet data."
     )
     analyze.add_argument("--season", type=int, required=True)
     analyze.add_argument("--week", type=int, required=True)
@@ -61,14 +60,7 @@ def build_parser() -> argparse.ArgumentParser:
     sync.add_argument("--season", type=int, required=True)
     sync.add_argument("--week", type=int, required=True)
     sync.add_argument("--output-dir", type=Path, default=PARQUET_DIR)
-    compact = commands.add_parser(
-        "compact", help="Compact one GCS league/week into Parquet objects."
-    )
-    compact.add_argument("--bucket", required=True)
-    compact.add_argument("--provider", choices=("espn", "sleeper"), required=True)
-    compact.add_argument("--league-id", required=True)
-    compact.add_argument("--season", type=int, required=True)
-    compact.add_argument("--week", type=int, required=True)
+    sync.add_argument("--tables", nargs="+", choices=PARQUET_TABLES)
 
     return parser
 
@@ -155,17 +147,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             season=args.season,
             matchup_period=args.week,
             output_dir=args.output_dir,
+            tables=args.tables,
         )
-        logging.info("Downloaded %d Parquet objects", count)
-    elif args.command == "compact":
-        outputs = compact_gcs_week(
-            args.bucket,
-            provider=args.provider,
-            league_id=args.league_id,
-            season=args.season,
-            matchup_period=args.week,
-        )
-        logging.info("Wrote %d compacted Parquet objects", len(outputs))
+        logging.info("Downloaded %d new Parquet objects", count)
     else:
         for path in generate_matchup_plots(
             args.season, args.week, args.league, args.provider
