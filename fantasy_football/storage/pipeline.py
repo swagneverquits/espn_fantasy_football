@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 from pathlib import Path
 
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 from fantasy_football.constants import (
     LEAGUE_ID_COL,
@@ -222,6 +225,7 @@ class ParquetSnapshotWriter:
         )
         state = json.loads(state_path.read_text()) if state_path.exists() else {}
         changed = False
+        changed_tables = []
         for table in ("team_metadata", "league_metadata", "player_metadata"):
             frame = frames[table]
             if frame.empty:
@@ -241,9 +245,17 @@ class ParquetSnapshotWriter:
             )
             state[key] = fingerprint
             changed = True
+            changed_tables.append(table)
         if changed:
             state_path.parent.mkdir(parents=True, exist_ok=True)
             state_path.write_text(json.dumps(state, indent=2))
+            logger.info(
+                "Metadata updated: provider=%s league=%s week=%s tables=%s",
+                provider,
+                league_id,
+                matchup_period,
+                ",".join(changed_tables),
+            )
 
 
 def build_writer(
@@ -261,7 +273,12 @@ def build_writer(
 
 def configured_writer() -> ParquetSnapshotWriter:
     """Build the writer from the VM environment configuration."""
-    return build_writer(bucket=os.getenv("GCS_BUCKET"))
+    bucket = os.getenv("GCS_BUCKET")
+    if bucket:
+        logger.info("Snapshot destination: GCS bucket=%s", bucket)
+    else:
+        logger.info("Snapshot destination: local path=%s", PARQUET_DIR)
+    return build_writer(bucket=bucket)
 
 
 def load_matchup_results_from_parquet(

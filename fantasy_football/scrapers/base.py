@@ -5,13 +5,15 @@ from __future__ import annotations
 import logging
 import time
 from abc import ABC, abstractmethod
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 
 from fantasy_football.constants import (
     DEFAULT_INTERVAL_SECONDS,
+    DEFAULT_PREGAME_BUFFER_SECONDS,
     DEFAULT_RETRY_SECONDS,
     DEFAULT_SCHEDULE_REFRESH_SECONDS,
 )
@@ -23,12 +25,19 @@ from fantasy_football.scrapers.schedule.windows import (
 )
 
 JSONData = dict[str, Any]
+logger = logging.getLogger(__name__)
 
 
 class Scraper(ABC):
     """Common lifecycle for provider-specific fantasy football scrapers."""
 
     provider = "unknown"
+
+    @property
+    def log_name(self) -> str:
+        """Return a concise provider and league identifier for logs."""
+        league_id = getattr(self, "league_id", "unknown")
+        return f"{self.provider} league={league_id}"
 
     @abstractmethod
     def get_league_metadata(self) -> JSONData:
@@ -73,6 +82,7 @@ class Scraper(ABC):
         """Persist one normalized snapshot, returning its row count."""
 
     def scrape_once(self) -> int:
+        """Fetch, normalize, and persist one provider snapshot."""
         league_metadata = self.get_league_metadata()
         team_metadata = self.get_team_metadata(league_metadata)
         player_metadata = self.get_player_metadata(league_metadata, team_metadata)
@@ -100,6 +110,12 @@ class Scraper(ABC):
         schedule_refresh_seconds: int = DEFAULT_SCHEDULE_REFRESH_SECONDS,
     ) -> int | None:
         """Poll during merged NFL game windows, retrying transient failures."""
+        logger.info(
+            "%s starting: interval=%ss schedule_gate=%s",
+            self.log_name,
+            interval_seconds,
+            schedule_gate and not once,
+        )
         if once or not schedule_gate:
             return self._run_without_schedule(
                 interval_seconds=interval_seconds,
@@ -113,15 +129,16 @@ class Scraper(ABC):
             try:
                 now = datetime.now(timezone.utc)
                 if now >= next_schedule_refresh:
-                    windows = build_game_windows(fetch_nfl_game_starts(now))
-                    next_schedule_refresh = (
-                        now
-                        + pd.Timedelta(
-                            seconds=schedule_refresh_seconds
-                        ).to_pytimedelta()
+                    game_starts = fetch_nfl_game_starts(now)
+                    windows = build_game_windows(game_starts)
+                    next_schedule_refresh = now + timedelta(
+                        seconds=schedule_refresh_seconds
                     )
-                    logging.info(
-                        "Schedule gate refreshed: %d polling window(s)", len(windows)
+                    logger.info(
+                        "%s schedule refreshed: games=%d windows=%d",
+                        self.log_name,
+                        len(game_starts),
+                        len(windows),
                     )
                 if active_window(windows, now) is None:
                     delay = seconds_until_next_window(windows, now)
@@ -129,12 +146,46 @@ class Scraper(ABC):
                         schedule_refresh_seconds,
                         delay if delay is not None else schedule_refresh_seconds,
                     )
+                    if delay is None:
+                        logger.info(
+                            "%s idle: no games found; checking again in %.0f seconds",
+                            self.log_name,
+                            sleep_seconds,
+                        )
+                    else:
+                        next_window = next(
+                            window for window in windows if window.start > now
+                        )
+                        eastern = ZoneInfo("America/New_York")
+                        kickoff = next_window.start + timedelta(
+                            seconds=DEFAULT_PREGAME_BUFFER_SECONDS
+                        )
+                        logger.info(
+                            "%s idle: next kickoff=%s ET; window opens=%s ET; sleeping %.0f seconds",
+                            self.log_name,
+                            kickoff.astimezone(eastern).strftime("%Y-%m-%d %I:%M %p"),
+                            next_window.start.astimezone(eastern).strftime(
+                                "%Y-%m-%d %I:%M %p"
+                            ),
+                            sleep_seconds,
+                        )
                     time.sleep(max(1.0, sleep_seconds))
                     continue
-                self.scrape_once()
+                started = time.monotonic()
+                rows = self.scrape_once()
+                logger.info(
+                    "%s snapshot saved: rows=%d elapsed=%.2fs",
+                    self.log_name,
+                    rows,
+                    time.monotonic() - started,
+                )
                 time.sleep(interval_seconds)
             except Exception:
-                logging.exception("%s scrape failed", self.provider)
+                logger.exception(
+                    "%s cycle failed; retrying in %ss",
+                    self.log_name,
+                    retry_seconds,
+                )
                 time.sleep(retry_seconds)
 
     def _run_without_schedule(
@@ -145,14 +196,30 @@ class Scraper(ABC):
         once: bool,
     ) -> int | None:
         """Run immediate polling, used by one-shot and ungated runs."""
+        logger.info(
+            "%s running without schedule gate: interval=%ss",
+            self.log_name,
+            interval_seconds,
+        )
         while True:
             try:
+                started = time.monotonic()
                 rows = self.scrape_once()
+                logger.info(
+                    "%s snapshot saved: rows=%d elapsed=%.2fs",
+                    self.log_name,
+                    rows,
+                    time.monotonic() - started,
+                )
                 if once:
                     return rows
                 time.sleep(interval_seconds)
             except Exception:
-                logging.exception("%s scrape failed", self.provider)
+                logger.exception(
+                    "%s cycle failed; retrying in %ss",
+                    self.log_name,
+                    retry_seconds,
+                )
                 if once:
                     raise
                 time.sleep(retry_seconds)
