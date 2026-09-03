@@ -115,7 +115,22 @@ def _run_all(args: argparse.Namespace) -> int:
                 *common,
             ]
         )
-    processes = [subprocess.Popen(command, cwd=PROJECT_ROOT) for command in commands]
+    logging.info(
+        "Starting %d league workers: interval=%ss schedule_gate=%s",
+        len(commands),
+        args.interval,
+        not args.no_schedule_gate,
+    )
+    bucket = os.getenv("GCS_BUCKET")
+    if bucket:
+        logging.info("Snapshot destination: GCS bucket=%s", bucket)
+
+    worker_env = os.environ.copy()
+    worker_env["FANTASY_FOOTBALL_WORKER"] = "1"
+    processes = [
+        subprocess.Popen(command, cwd=PROJECT_ROOT, env=worker_env)
+        for command in commands
+    ]
     try:
         return max(process.wait() for process in processes)
     except KeyboardInterrupt:

@@ -17,15 +17,16 @@ from fantasy_football.constants import (
     DEFAULT_RETRY_SECONDS,
     DEFAULT_SCHEDULE_REFRESH_SECONDS,
 )
+from fantasy_football.scrapers.schedule.cache import get_game_starts
 from fantasy_football.scrapers.schedule.windows import (
     active_window,
     build_game_windows,
-    fetch_nfl_game_starts,
     seconds_until_next_window,
 )
 
 JSONData = dict[str, Any]
 logger = logging.getLogger(__name__)
+WORKER_PROCESS = os.getenv("FANTASY_FOOTBALL_WORKER") == "1"
 
 
 class Scraper(ABC):
@@ -110,12 +111,13 @@ class Scraper(ABC):
         schedule_refresh_seconds: int = DEFAULT_SCHEDULE_REFRESH_SECONDS,
     ) -> int | None:
         """Poll during merged NFL game windows, retrying transient failures."""
-        logger.info(
-            "%s starting: interval=%ss schedule_gate=%s",
-            self.log_name,
-            interval_seconds,
-            schedule_gate and not once,
-        )
+        if not WORKER_PROCESS:
+            logger.info(
+                "%s starting: interval=%ss schedule_gate=%s",
+                self.log_name,
+                interval_seconds,
+                schedule_gate and not once,
+            )
         if once or not schedule_gate:
             return self._run_without_schedule(
                 interval_seconds=interval_seconds,
@@ -128,17 +130,14 @@ class Scraper(ABC):
         while True:
             try:
                 now = datetime.now(timezone.utc)
+                schedule_refreshed = False
                 if now >= next_schedule_refresh:
-                    game_starts = fetch_nfl_game_starts(now)
+                    game_starts, schedule_refreshed = get_game_starts(
+                        now, refresh_seconds=schedule_refresh_seconds
+                    )
                     windows = build_game_windows(game_starts)
                     next_schedule_refresh = now + timedelta(
                         seconds=schedule_refresh_seconds
-                    )
-                    logger.info(
-                        "%s schedule refreshed: games=%d windows=%d",
-                        self.log_name,
-                        len(game_starts),
-                        len(windows),
                     )
                 if active_window(windows, now) is None:
                     delay = seconds_until_next_window(windows, now)
@@ -147,11 +146,13 @@ class Scraper(ABC):
                         delay if delay is not None else schedule_refresh_seconds,
                     )
                     if delay is None:
-                        logger.info(
-                            "%s idle: no games found; checking again in %.0f seconds",
-                            self.log_name,
-                            sleep_seconds,
-                        )
+                        if schedule_refreshed:
+                            logger.info(
+                                "NFL schedule: games=%d windows=%d; no upcoming games; sleeping %.0f seconds",
+                                len(game_starts),
+                                len(windows),
+                                sleep_seconds,
+                            )
                     else:
                         next_window = next(
                             window for window in windows if window.start > now
@@ -160,15 +161,19 @@ class Scraper(ABC):
                         kickoff = next_window.start + timedelta(
                             seconds=DEFAULT_PREGAME_BUFFER_SECONDS
                         )
-                        logger.info(
-                            "%s idle: next kickoff=%s ET; window opens=%s ET; sleeping %.0f seconds",
-                            self.log_name,
-                            kickoff.astimezone(eastern).strftime("%Y-%m-%d %I:%M %p"),
-                            next_window.start.astimezone(eastern).strftime(
-                                "%Y-%m-%d %I:%M %p"
-                            ),
-                            sleep_seconds,
-                        )
+                        if schedule_refreshed:
+                            logger.info(
+                                "NFL schedule: games=%d windows=%d; next kickoff=%s ET; window opens=%s ET; sleeping %.0f seconds",
+                                len(game_starts),
+                                len(windows),
+                                kickoff.astimezone(eastern).strftime(
+                                    "%Y-%m-%d %I:%M %p"
+                                ),
+                                next_window.start.astimezone(eastern).strftime(
+                                    "%Y-%m-%d %I:%M %p"
+                                ),
+                                sleep_seconds,
+                            )
                     time.sleep(max(1.0, sleep_seconds))
                     continue
                 started = time.monotonic()

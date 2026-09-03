@@ -1,4 +1,4 @@
-﻿"""Retrieve NFL kickoff times used by the live-polling schedule gate."""
+"""Retrieve NFL kickoff times used by the live-polling schedule gate."""
 
 from __future__ import annotations
 
@@ -60,4 +60,4 @@ def fetch_nfl_game_starts(
         start = _parse_start_time(start_value)
         if lower <= start <= upper:
             starts.append(start)
-    return sorted(set(starts))
+    return sorted(starts)

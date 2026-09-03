@@ -11,6 +11,7 @@ from pathlib import Path
 import pandas as pd
 
 logger = logging.getLogger(__name__)
+WORKER_PROCESS = os.getenv("FANTASY_FOOTBALL_WORKER") == "1"
 
 from fantasy_football.constants import (
     LEAGUE_ID_COL,
@@ -275,7 +276,9 @@ def configured_writer() -> ParquetSnapshotWriter:
     """Build the writer from the VM environment configuration."""
     bucket = os.getenv("GCS_BUCKET")
     if bucket:
-        logger.info("Snapshot destination: GCS bucket=%s", bucket)
+        if not WORKER_PROCESS:
+            logger.info("Snapshot destination: GCS bucket=%s", bucket)
     else:
-        logger.info("Snapshot destination: local path=%s", PARQUET_DIR)
+        if not WORKER_PROCESS:
+            logger.info("Snapshot destination: local path=%s", PARQUET_DIR)
     return build_writer(bucket=bucket)
