@@ -20,7 +20,7 @@ from fantasy_football.constants import (
     TIMESTAMP_COL,
 )
 from fantasy_football.normalization import player_data, unix_seconds
-from fantasy_football.parquet_storage import (
+from fantasy_football.storage.objects import (
     GCSObjectUploader,
     LocalObjectUploader,
     ObjectUploader,

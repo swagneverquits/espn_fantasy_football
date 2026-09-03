@@ -3,7 +3,7 @@
 import pandas as pd
 
 from fantasy_football.config import LEAGUE_IDS
-from fantasy_football.parquet_pipeline import configured_writer
+from fantasy_football.storage.pipeline import configured_writer
 
 from ..base import JSONData, Scraper
 from .client import fetch_league_data

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from fantasy_football.parquet_pipeline import (
+from fantasy_football.storage.pipeline import (
     build_writer,
     load_matchup_results_from_parquet,
 )

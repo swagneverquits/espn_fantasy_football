@@ -15,7 +15,7 @@ from fantasy_football.constants import (
     DEFAULT_RETRY_SECONDS,
     DEFAULT_SCHEDULE_REFRESH_SECONDS,
 )
-from fantasy_football.schedule import (
+from fantasy_football.scrapers.schedule.windows import (
     active_window,
     build_game_windows,
     fetch_nfl_game_starts,

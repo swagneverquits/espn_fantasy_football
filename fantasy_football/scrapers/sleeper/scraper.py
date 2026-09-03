@@ -4,7 +4,7 @@ from typing import Any
 
 import pandas as pd
 
-from fantasy_football.parquet_pipeline import configured_writer
+from fantasy_football.storage.pipeline import configured_writer
 
 from ..base import JSONData, Scraper
 from .client import fetch_json, fetch_weekly_player_data

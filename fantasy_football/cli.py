@@ -10,7 +10,6 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from fantasy_football.analysis.plotting import generate_matchup_plots
-from fantasy_football.compaction import compact_gcs_week
 from fantasy_football.config import ESPN_LEAGUES, SLEEPER_LEAGUES
 from fantasy_football.constants import (
     DEFAULT_INTERVAL_SECONDS,
@@ -19,7 +18,8 @@ from fantasy_football.constants import (
 )
 from fantasy_football.scrapers.espn.scraper import main as run_espn
 from fantasy_football.scrapers.sleeper.scraper import main as run_sleeper
-from fantasy_football.sync import sync_parquet_prefix
+from fantasy_football.storage.compaction import compact_gcs_week
+from fantasy_football.storage.sync import sync_parquet_prefix
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 

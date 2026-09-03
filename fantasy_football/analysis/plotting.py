@@ -32,7 +32,7 @@ from fantasy_football.analysis.constants import (
 )
 from fantasy_football.config import ESPN_LEAGUES, SLEEPER_LEAGUES
 from fantasy_football.constants import PARQUET_DIR, PLOTS_DIR
-from fantasy_football.parquet_pipeline import load_matchup_results_from_parquet
+from fantasy_football.storage.pipeline import load_matchup_results_from_parquet
 
 
 def plot_matchup(

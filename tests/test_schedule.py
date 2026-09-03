@@ -1,7 +1,7 @@
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from fantasy_football.schedule import (
+from fantasy_football.scrapers.schedule.windows import (
     active_window,
     build_game_windows,
     seconds_until_next_window,

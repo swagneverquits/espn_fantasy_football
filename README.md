@@ -9,11 +9,9 @@ fantasy_football/
   constants.py          Shared paths, API endpoints, column names, and defaults
   config.py             TOML league configuration loading
   normalization.py      Provider-specific player normalization
-  parquet_pipeline.py   Snapshot writing and local Parquet reads
-  parquet_storage.py    Local/GCS object upload implementations
-  sync.py                GCS-to-local Parquet sync
-  scrapers/             Shared scraper lifecycle plus ESPN/Sleeper implementations
-  analysis/plotting.py  Matchup plotting
+  storage/              Parquet objects, snapshot pipeline, compaction, and sync
+  scrapers/             Shared lifecycle plus ESPN, Sleeper, and schedule implementations
+  analysis/plotting.py   Matchup plotting
 config/
   leagues.toml.example  Checked-in configuration template
 scripts/run.py           Unified scraping, sync, and analysis entry point
