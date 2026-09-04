@@ -13,13 +13,13 @@ from .parser import current_week, matchup_rows
 class ESPNScraper(Scraper):
     provider = "ESPN"
 
-    def __init__(self, league: str, *, season: int = 2026):
+    def __init__(self, league: str, *, season: int = 2026, storage_mode: str = "local"):
         if league not in LEAGUE_IDS:
             raise ValueError(f"Unknown league '{league}'")
         self.league = league
         self.league_id = LEAGUE_IDS[league]
         self.season = season
-        self.snapshot_writer = configured_writer()
+        self.snapshot_writer = configured_writer(storage_mode)
 
     def get_league_metadata(self) -> JSONData:
         """Fetch ESPN's combined league payload."""
@@ -83,7 +83,7 @@ def main(
     once: bool = False,
     schedule_gate: bool = True,
 ):
-    return ESPNScraper(league, season=season).run(
+    return ESPNScraper(league, season=season, storage_mode=storage_mode).run(
         interval_seconds=interval_seconds,
         retry_seconds=retry_seconds,
         once=once,

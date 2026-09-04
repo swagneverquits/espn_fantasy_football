@@ -14,11 +14,13 @@ from .parser import matchup_rows
 class SleeperScraper(Scraper):
     provider = "Sleeper"
 
-    def __init__(self, league_id: str, *, season: int = 2026):
+    def __init__(
+        self, league_id: str, *, season: int = 2026, storage_mode: str = "local"
+    ):
         self.league_id = str(league_id)
         self.season = season
         self._weekly_metadata: JSONData | None = None
-        self.snapshot_writer = configured_writer()
+        self.snapshot_writer = configured_writer(storage_mode)
 
     def get_league_metadata(self) -> JSONData:
         """Fetch league identity and users once for this scraper run."""
@@ -100,7 +102,7 @@ def main(
     once: bool = False,
     schedule_gate: bool = True,
 ):
-    return SleeperScraper(league_id, season=season).run(
+    return SleeperScraper(league_id, season=season, storage_mode=storage_mode).run(
         interval_seconds=interval_seconds,
         retry_seconds=retry_seconds,
         once=once,

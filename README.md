@@ -29,7 +29,7 @@ Copy-Item config/leagues.toml.example config/leagues.toml
 
 Edit `config/leagues.toml` with the leagues to track. The local file is ignored by Git. League IDs are numeric TOML values.
 
-For local writes, raw `.pq` Parquet objects are saved under `results/parquet`. On the server, set `GCS_BUCKET` and authenticate with Google Application Default Credentials; the scraper uploads each completed object directly to that bucket. DuckDB reads the raw local objects for analysis; no compaction step is required.
+Without `GCS_BUCKET`, raw `.pq` Parquet objects are saved under `results/parquet`. On the server, set `GCS_BUCKET` and authenticate with Google Application Default Credentials to upload each completed object directly to GCS. DuckDB reads the raw local objects for analysis; no compaction step is required.
 
 ## Collect data
 
@@ -40,11 +40,13 @@ python scripts/run.py scrape espn --league example_league --once
 python scripts/run.py scrape sleeper --league-id 123456789012345678 --once
 ```
 
-Run continuous polling, using the shared 30-second default:
+Run continuous polling locally, using the shared 30-second default:
 
 ```powershell
 python scripts/run.py scrape all
 ```
+
+Use `--storage gcs` with `GCS_BUCKET` set to upload to GCS; use `--storage local` to write only to `results/parquet`.
 
 Each poll writes one `team_snapshots` object and one `player_snapshots` object per league/week. Metadata objects are written only on the first poll or when their values change. Object paths are partitioned by provider, league, season, week, table, and Unix timestamp.
 

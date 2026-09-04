@@ -272,13 +272,18 @@ def build_writer(
     )
 
 
-def configured_writer() -> ParquetSnapshotWriter:
-    """Build the writer from the VM environment configuration."""
-    bucket = os.getenv("GCS_BUCKET")
-    if bucket:
-        if not WORKER_PROCESS:
-            logger.info("Snapshot destination: GCS bucket=%s", bucket)
-    else:
+def configured_writer(storage_mode: str = "local") -> ParquetSnapshotWriter:
+    """Build a writer for the explicitly selected storage destination."""
+    if storage_mode not in {"local", "gcs"}:
+        raise ValueError("storage_mode must be 'local' or 'gcs'")
+    if storage_mode == "local":
         if not WORKER_PROCESS:
             logger.info("Snapshot destination: local path=%s", PARQUET_DIR)
+        return build_writer()
+
+    bucket = os.getenv("GCS_BUCKET")
+    if not bucket:
+        raise ValueError("GCS_BUCKET is required when storage_mode='gcs'")
+    if not WORKER_PROCESS:
+        logger.info("Snapshot destination: GCS bucket=%s", bucket)
     return build_writer(bucket=bucket)

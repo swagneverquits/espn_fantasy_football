@@ -6,8 +6,8 @@ import argparse
 import logging
 import os
 import subprocess
-import time
 import sys
+import time
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -31,6 +31,7 @@ def _add_polling_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--retry-interval", type=int, default=DEFAULT_RETRY_SECONDS)
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--no-schedule-gate", action="store_true")
+    parser.add_argument("--storage", choices=("local", "gcs"), default="local")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -74,6 +75,7 @@ def _polling_args(args: argparse.Namespace) -> dict[str, object]:
         "retry_seconds": args.retry_interval,
         "once": args.once,
         "schedule_gate": not args.no_schedule_gate,
+        "storage_mode": args.storage,
     }
 
 
@@ -85,6 +87,8 @@ def _run_all(args: argparse.Namespace) -> int:
         str(args.interval),
         "--retry-interval",
         str(args.retry_interval),
+        "--storage",
+        args.storage,
     ]
     if args.once:
         common.append("--once")
@@ -118,13 +122,14 @@ def _run_all(args: argparse.Namespace) -> int:
             ]
         )
     logging.info(
-        "Starting %d league workers: interval=%ss schedule_gate=%s",
+        "Starting %d league workers: interval=%ss schedule_gate=%s storage=%s",
         len(commands),
         args.interval,
         not args.no_schedule_gate,
+        args.storage,
     )
     bucket = os.getenv("GCS_BUCKET")
-    if bucket:
+    if bucket and args.storage == "gcs":
         logging.info("Snapshot destination: GCS bucket=%s", bucket)
 
     worker_env = os.environ.copy()

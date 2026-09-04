@@ -11,7 +11,7 @@ services:
         max-file: "3"
     environment:
       TZ: America/New_York
-      GCS_BUCKET: "${GCS_BUCKET:?Set GCS_BUCKET before starting the scraper}"
+      GCS_BUCKET: "${GCS_BUCKET:-}"
     volumes:
       - ./config/leagues.toml:/app/config/leagues.toml:ro
       - ./results:/app/results
