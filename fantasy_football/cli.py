@@ -6,6 +6,7 @@ import argparse
 import logging
 import os
 import subprocess
+import time
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -133,7 +134,32 @@ def _run_all(args: argparse.Namespace) -> int:
         for command in commands
     ]
     try:
-        return max(process.wait() for process in processes)
+        while True:
+            statuses = [process.poll() for process in processes]
+            if all(status is not None for status in statuses):
+                return max(statuses, default=0)
+            exited = next(
+                (
+                    (index, status)
+                    for index, status in enumerate(statuses)
+                    if status is not None
+                ),
+                None,
+            )
+            if exited is not None:
+                index, status = exited
+                logging.error(
+                    "League worker %d exited unexpectedly with status %d; stopping remaining workers",
+                    index + 1,
+                    status,
+                )
+                for process in processes:
+                    if process.poll() is None:
+                        process.terminate()
+                for process in processes:
+                    process.wait()
+                return status or 1
+            time.sleep(1)
     except KeyboardInterrupt:
         for process in processes:
             process.terminate()
