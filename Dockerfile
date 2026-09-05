@@ -10,4 +10,3 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY fantasy_football fantasy_football
-COPY scripts scripts
