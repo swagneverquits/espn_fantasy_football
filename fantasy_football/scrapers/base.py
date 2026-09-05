@@ -140,6 +140,14 @@ class Scraper(ABC):
                     next_schedule_refresh = now + timedelta(
                         seconds=schedule_refresh_seconds
                     )
+                    eastern = ZoneInfo("America/New_York")
+                    window_summary = [
+                        "  # | opens (ET)          | closes (ET)",
+                        *[
+                            f" {index:2d} | {window.start.astimezone(eastern):%a %m/%d %I:%M %p} | {window.end.astimezone(eastern):%a %m/%d %I:%M %p}"
+                            for index, window in enumerate(windows, start=1)
+                        ],
+                    ]
                 if active_window(windows, now) is None:
                     delay = seconds_until_next_window(windows, now)
                     sleep_seconds = min(
@@ -164,9 +172,10 @@ class Scraper(ABC):
                         )
                         if schedule_refreshed:
                             logger.info(
-                                "NFL schedule: games=%d windows=%d; next kickoff=%s ET; window opens=%s ET; sleeping %.0f seconds",
+                                "NFL schedule | %d games | %d windows\n%s\nnext kickoff: %s ET | window opens: %s ET | sleeping: %.0f seconds",
                                 len(game_starts),
                                 len(windows),
+                                "\n".join(window_summary),
                                 kickoff.astimezone(eastern).strftime(
                                     "%Y-%m-%d %I:%M %p"
                                 ),
