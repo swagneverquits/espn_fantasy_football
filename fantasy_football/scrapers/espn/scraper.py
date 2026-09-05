@@ -1,11 +1,60 @@
-"""ESPN snapshot acquisition."""
+"""Fetch ESPN API data and produce normalized snapshots."""
 
-from fantasy_football.constants import DEFAULT_SEASON
+import json
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
+
+from fantasy_football.constants import DEFAULT_SEASON, ESPN_API_HOST
 from fantasy_football.snapshot import Snapshot
 
 from ..base import Scraper
-from .client import fetch_league_data
 from .parser import parse_snapshot
+
+DEFAULT_VIEWS = (
+    "mMatchup",
+    "mMatchupScore",
+    "mRoster",
+    "mScoreboard",
+    "mSettings",
+    "mStatus",
+    "mTeam",
+)
+
+
+class ESPNAPIError(RuntimeError):
+    """Raised when ESPN returns an unusable API response."""
+
+
+def build_league_url(season: int, league_id: int, views=DEFAULT_VIEWS) -> str:
+    path = f"/apis/v3/games/ffl/seasons/{season}/segments/0/leagues/{league_id}"
+    return f"{ESPN_API_HOST}{path}?{urlencode([('view', view) for view in views])}"
+
+
+def fetch_league_data(season: int, league_id: int, *, timeout: int = 30) -> dict:
+    headers = {"User-Agent": "Mozilla/5.0 (Fantasy Football collector)"}
+    try:
+        with urlopen(
+            Request(build_league_url(season, league_id), headers=headers),
+            timeout=timeout,
+        ) as response:
+            data = json.load(response)
+    except HTTPError as exc:
+        if exc.code in (401, 403):
+            raise ESPNAPIError(
+                "ESPN rejected the league request; set ESPN_S2 and ESPN_SWID for a private league"
+            ) from exc
+        raise ESPNAPIError(f"ESPN API returned HTTP {exc.code}") from exc
+    except URLError as exc:
+        raise ESPNAPIError(f"Could not reach ESPN API: {exc.reason}") from exc
+    except ValueError as exc:
+        raise ESPNAPIError("ESPN API returned invalid JSON") from exc
+
+    if not isinstance(data, dict):
+        raise ESPNAPIError("ESPN API returned an unexpected response shape")
+    if data.get("messages"):
+        raise ESPNAPIError("ESPN API error: " + "; ".join(map(str, data["messages"])))
+    return data
 
 
 class ESPNScraper(Scraper):

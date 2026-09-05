@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from fantasy_football.constants import PARQUET_TABLES
+from fantasy_football.storage.parquet import partition_prefix
 
 logger = logging.getLogger(__name__)
 
@@ -30,10 +31,7 @@ def sync_parquet_prefix(
     if unknown_tables:
         raise ValueError(f"Unknown Parquet table(s): {sorted(unknown_tables)}")
 
-    prefix = (
-        f"provider={provider}/league={league_id}/season={season}/"
-        f"week={matchup_period}/"
-    )
+    prefix = partition_prefix(provider, league_id, season, matchup_period)
     root = Path(output_dir)
     downloaded = 0
     skipped = 0

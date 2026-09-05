@@ -91,10 +91,12 @@ By default, polling is schedule-gated: the scraper starts 15 minutes before each
 
 ## Code boundaries
 
-Each provider implements `Scraper.fetch_snapshot() -> Snapshot`. Its parser produces the five normalized DataFrames using the shared schema in `snapshot.py`. Provider payloads and scoring rules stay under `scrapers/espn` and `scrapers/sleeper`.
+Each provider implements `Scraper.fetch_snapshot() -> Snapshot`. Its parser produces the five normalized DataFrames using the shared schema in `snapshot.py`. Each provider keeps HTTP requests and acquisition in `scraper.py`, and response normalization in `parser.py`. Sleeper's probability calculation remains in `win_probability.py`.
 
 `Poller` handles timing and retries, while `run_all` supervises league workers. The writer accepts a `Snapshot` and handles Parquet persistence and metadata change detection. These changes preserve the existing object paths and persisted columns.
 
 DuckDB returns the stored snake_case columns plus team/league names. Plotting accepts those DataFrames directly and converts Unix timestamps to Eastern Time for display. Configuration and database queries are handled by the CLI, outside rendering.
 
-Tests are grouped by provider, runner, CLI/configuration, storage pipeline, sync, schedule, and plotting.
+Tests are grouped by provider, runner, CLI/configuration, storage writer, sync, schedule, and plotting.
+
+Storage modules are organized by responsibility: `writer.py` saves snapshots and metadata state, `parquet.py` serializes and publishes objects and defines their shared partition paths, `sync.py` downloads them, and `duckdb.py` queries them. The CLI resolves storage environment settings. Local writes stage files on the destination filesystem before publishing them atomically.

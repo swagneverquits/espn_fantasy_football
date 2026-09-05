@@ -10,7 +10,7 @@ from fantasy_football.constants import DEFAULT_SCHEDULE_REFRESH_SECONDS
 from fantasy_football.scrapers.sleeper.parser import parse_snapshot
 from fantasy_football.scrapers.sleeper.scraper import SleeperScraper
 from fantasy_football.scrapers.sleeper.win_probability import sleeper_win_percentage
-from fantasy_football.storage.pipeline import build_writer
+from fantasy_football.storage.writer import build_writer
 
 
 class SleeperScrapingTests(unittest.TestCase):

@@ -25,7 +25,7 @@ from fantasy_football.scrapers.schedule.windows import (
     build_game_windows,
     seconds_until_next_window,
 )
-from fantasy_football.storage.pipeline import ParquetSnapshotWriter
+from fantasy_football.storage.writer import ParquetSnapshotWriter
 
 logger = logging.getLogger(__name__)
 

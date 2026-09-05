@@ -66,7 +66,7 @@ class ConfigTests(unittest.TestCase):
             path.write_text("[espn]\nexample = 123\n")
             with (
                 patch("fantasy_football.scrapers.espn.scraper.ESPNScraper") as scraper,
-                patch("fantasy_football.storage.pipeline.configured_writer") as writer,
+                patch("fantasy_football.cli._configured_writer") as writer,
                 patch("fantasy_football.runner.Poller") as poller,
             ):
                 result = main(

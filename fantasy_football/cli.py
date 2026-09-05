@@ -2,8 +2,10 @@
 
 import argparse
 import logging
+import os
 from collections.abc import Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from fantasy_football.config import load_leagues
 from fantasy_football.constants import (
@@ -15,6 +17,28 @@ from fantasy_football.constants import (
     PARQUET_TABLES,
     PLOTS_DIR,
 )
+
+if TYPE_CHECKING:
+    from fantasy_football.storage.writer import ParquetSnapshotWriter
+
+
+def _configured_writer(storage_mode: str = "local") -> "ParquetSnapshotWriter":
+    """Resolve runtime storage settings before constructing the writer."""
+    from fantasy_football.storage.writer import build_writer
+
+    if storage_mode not in {"local", "gcs"}:
+        raise ValueError("storage_mode must be 'local' or 'gcs'")
+    if storage_mode == "local":
+        if os.getenv("FANTASY_FOOTBALL_WORKER") != "1":
+            logging.info("Snapshot destination: local path=%s", PARQUET_DIR)
+        return build_writer()
+
+    bucket = os.getenv("GCS_BUCKET")
+    if not bucket:
+        raise ValueError("GCS_BUCKET is required when storage_mode='gcs'")
+    if os.getenv("FANTASY_FOOTBALL_WORKER") != "1":
+        logging.info("Snapshot destination: GCS bucket=%s", bucket)
+    return build_writer(bucket=bucket)
 
 
 def _add_polling_args(parser: argparse.ArgumentParser) -> None:
@@ -63,16 +87,20 @@ def build_parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
     scrape = commands.add_parser("scrape", help="Collect live league snapshots.")
     providers = scrape.add_subparsers(dest="provider", required=True)
+
     espn = providers.add_parser("espn", help="Scrape one configured ESPN league.")
     espn.add_argument("--league", required=True)
     _add_polling_args(espn)
+
     sleeper = providers.add_parser("sleeper", help="Scrape one Sleeper league.")
     sleeper.add_argument("--league-id", required=True)
     _add_polling_args(sleeper)
+
     all_leagues = providers.add_parser(
         "all", help="Scrape all configured leagues in parallel."
     )
     _add_polling_args(all_leagues)
+
     analyze = commands.add_parser(
         "analyze", help="Generate matchup plots from local DuckDB/Parquet data."
     )
@@ -80,6 +108,7 @@ def build_parser() -> argparse.ArgumentParser:
     analyze.add_argument("--week", type=int, required=True)
     analyze.add_argument("--league", required=True)
     analyze.add_argument("--provider", choices=("espn", "sleeper"), default="espn")
+
     sync = commands.add_parser("sync", help="Download one league/week from GCS.")
     sync.add_argument("--bucket", required=True)
     sync.add_argument("--provider", choices=("espn", "sleeper"), required=True)
@@ -120,7 +149,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.command == "scrape":
         from fantasy_football.runner import Poller, RunOptions, run_all
-        from fantasy_football.storage.pipeline import configured_writer
 
         options = RunOptions(
             args.season,
@@ -143,7 +171,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             from fantasy_football.scrapers.sleeper.scraper import SleeperScraper
 
             scraper = SleeperScraper(args.league_id, season=args.season)
-        Poller(scraper, configured_writer(args.storage)).run(
+        Poller(scraper, _configured_writer(args.storage)).run(
             interval_seconds=options.interval_seconds,
             retry_seconds=options.retry_seconds,
             once=options.once,

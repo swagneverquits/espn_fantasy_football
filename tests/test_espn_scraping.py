@@ -1,12 +1,12 @@
 import datetime
 import unittest
 
-from fantasy_football.scrapers.espn.client import build_league_url
 from fantasy_football.scrapers.espn.parser import (
     _player_data,
     current_week,
     parse_snapshot,
 )
+from fantasy_football.scrapers.espn.scraper import build_league_url
 
 
 class ESPNScrapingTests(unittest.TestCase):

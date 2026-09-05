@@ -7,7 +7,7 @@ import pandas as pd
 
 from fantasy_football.snapshot import Snapshot
 from fantasy_football.storage.duckdb import load_matchup_results
-from fantasy_football.storage.pipeline import build_writer
+from fantasy_football.storage.writer import build_writer
 
 
 class ParquetPipelineTests(unittest.TestCase):
@@ -71,6 +71,19 @@ class ParquetPipelineTests(unittest.TestCase):
             self.assertIn("timestamp", stored)
 
 
+def _metadata_snapshot(frames: dict[str, pd.DataFrame], timestamp: int) -> Snapshot:
+    return Snapshot(
+        provider="espn",
+        league_id="123",
+        season=2026,
+        matchup_period=1,
+        timestamp=timestamp,
+        team_snapshots=pd.DataFrame(),
+        player_snapshots=pd.DataFrame(),
+        **frames,
+    )
+
+
 class MetadataRecoveryTests(unittest.TestCase):
     def test_corrupt_state_recovers_and_destinations_are_independent(self):
         frames = {
@@ -79,7 +92,7 @@ class MetadataRecoveryTests(unittest.TestCase):
         }
         with (
             tempfile.TemporaryDirectory() as directory,
-            patch("fantasy_football.storage.pipeline.GCSObjectUploader"),
+            patch("fantasy_football.storage.writer.GCSObjectUploader"),
         ):
             writers = [
                 build_writer(directory),
@@ -89,16 +102,16 @@ class MetadataRecoveryTests(unittest.TestCase):
             self.assertEqual(len({writer.state_path for writer in writers}), 3)
             for writer in writers:
                 writer.store = Mock()
-                writer._write_changed_metadata(frames, "espn", "123", 2026, 1, 1)
+                writer._write_changed_metadata(_metadata_snapshot(frames, 1))
                 self.assertEqual(writer.store.write_frame.call_count, 3)
-                writer._write_changed_metadata(frames, "espn", "123", 2026, 1, 2)
+                writer._write_changed_metadata(_metadata_snapshot(frames, 2))
                 self.assertEqual(writer.store.write_frame.call_count, 3)
             local = writers[0]
             state = local.state_path.with_name(f"{local.state_path.stem}_espn_123.json")
             state.write_text("{broken", encoding="utf-8")
-            local._write_changed_metadata(frames, "espn", "123", 2026, 1, 3)
+            local._write_changed_metadata(_metadata_snapshot(frames, 3))
             self.assertEqual(local.store.write_frame.call_count, 6)
-            local._write_changed_metadata(frames, "espn", "123", 2026, 1, 4)
+            local._write_changed_metadata(_metadata_snapshot(frames, 4))
             self.assertEqual(local.store.write_frame.call_count, 6)
 
     def test_failed_state_replace_preserves_previous_state(self):
@@ -110,7 +123,7 @@ class MetadataRecoveryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             writer = build_writer(directory)
             writer.store = Mock()
-            writer._write_changed_metadata(frames, "espn", "123", 2026, 1, 1)
+            writer._write_changed_metadata(_metadata_snapshot(frames, 1))
             state = writer.state_path.with_name(
                 f"{writer.state_path.stem}_espn_123.json"
             )
@@ -118,8 +131,8 @@ class MetadataRecoveryTests(unittest.TestCase):
             frames["league_metadata"]["name"] = "New"
             with patch.object(Path, "replace", side_effect=OSError("interrupted")):
                 with self.assertRaises(OSError):
-                    writer._write_changed_metadata(frames, "espn", "123", 2026, 1, 2)
+                    writer._write_changed_metadata(_metadata_snapshot(frames, 2))
             self.assertEqual(state.read_bytes(), previous)
             self.assertEqual(list(Path(directory).glob("*.tmp")), [])
-            writer._write_changed_metadata(frames, "espn", "123", 2026, 1, 3)
+            writer._write_changed_metadata(_metadata_snapshot(frames, 3))
             self.assertNotEqual(state.read_bytes(), previous)

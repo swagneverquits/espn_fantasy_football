@@ -8,6 +8,7 @@ import duckdb
 import pandas as pd
 
 from fantasy_football.constants import TEAM_ID_COL, TIMESTAMP_COL
+from fantasy_football.storage.parquet import partition_prefix
 
 
 def _sql_path(path: Path) -> str:
@@ -28,13 +29,7 @@ def load_matchup_results(
     matchup_period: int,
 ) -> pd.DataFrame:
     """Query raw local Parquet snapshots and return the plotting DataFrame."""
-    prefix = (
-        Path(root)
-        / f"provider={provider}"
-        / f"league={league_id}"
-        / f"season={season}"
-        / f"week={matchup_period}"
-    )
+    prefix = Path(root) / partition_prefix(provider, league_id, season, matchup_period)
     snapshot_glob = _parquet_glob(prefix, "team_snapshots")
     if not list(snapshot_glob.parent.glob(snapshot_glob.name)):
         raise FileNotFoundError(f"No Parquet snapshots found under {prefix}")
