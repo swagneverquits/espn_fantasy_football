@@ -20,7 +20,7 @@ from fantasy_football.constants import (
 )
 from fantasy_football.scrapers.espn.scraper import main as run_espn
 from fantasy_football.scrapers.sleeper.scraper import main as run_sleeper
-from fantasy_football.storage.sync import PARQUET_TABLES, sync_parquet_prefix
+from fantasy_football.storage.sync import sync_parquet_prefix
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 

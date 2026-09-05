@@ -5,7 +5,7 @@ services:
     restart: unless-stopped
     stop_grace_period: 30s
     init: true
-    command: python scripts/run.py scrape all --storage gcs
+    command: python -m fantasy_football.cli scrape all --storage gcs
     logging:
       driver: json-file
       options:

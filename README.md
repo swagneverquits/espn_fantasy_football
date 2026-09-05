@@ -13,7 +13,7 @@ fantasy_football/
   analysis/plotting.py   Matchup plotting
 config/
   leagues.toml.example  Checked-in configuration template
-scripts/run.py           Unified scraping, sync, and analysis entry point
+fantasy_football/cli.py  Unified scraping, sync, and analysis entry point
 results/
   parquet/              Local Parquet cache used for analysis
   plots/                Generated plots
@@ -36,14 +36,14 @@ Without `GCS_BUCKET`, raw `.pq` Parquet objects are saved under `results/parquet
 Run one scrape:
 
 ```powershell
-python scripts/run.py scrape espn --league example_league --once
-python scripts/run.py scrape sleeper --league-id 123456789012345678 --once
+python -m fantasy_football.cli scrape espn --league example_league --once
+python -m fantasy_football.cli scrape sleeper --league-id 123456789012345678 --once
 ```
 
 Run continuous polling locally, using the shared 30-second default:
 
 ```powershell
-python scripts/run.py scrape all
+python -m fantasy_football.cli scrape all
 ```
 
 Use `--storage gcs` with `GCS_BUCKET` set to upload to GCS; use `--storage local` to write only to `results/parquet`.
@@ -55,13 +55,13 @@ Each poll writes one `team_snapshots` object and one `player_snapshots` object p
 Incrementally download new Parquet objects from GCS into the local cache. For plotting, only the team and league tables are needed:
 
 ```powershell
-python scripts/run.py sync --bucket YOUR_BUCKET --provider espn --league-id 123456789 --season 2026 --week 1 --tables team_snapshots team_metadata league_metadata
+python -m fantasy_football.cli sync --bucket YOUR_BUCKET --provider espn --league-id 123456789 --season 2026 --week 1 --tables team_snapshots team_metadata league_metadata
 ```
 
 Generate plots from the local Parquet cache through DuckDB and pandas:
 
 ```powershell
-python scripts/run.py analyze --provider espn --season 2026 --week 1 --league example_league
+python -m fantasy_football.cli analyze --provider espn --season 2026 --week 1 --league example_league
 ```
 
 For Sleeper, use the configured TOML league name and `--provider sleeper`. Plots are written to `results/plots/<season>/<league>/week_<week>/`.

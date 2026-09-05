@@ -17,6 +17,9 @@ DEFAULT_GAME_WINDOW_SECONDS = 4 * 60 * 60
 
 # External service endpoints
 ESPN_API_HOST = "https://lm-api-reads.fantasy.espn.com"
+ESPN_SCHEDULE_URL = (
+    "https://site.web.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
+)
 SLEEPER_API_HOST = "https://api.sleeper.app/v1"
 SLEEPER_DATA_HOST = "https://api.sleeper.com"
 

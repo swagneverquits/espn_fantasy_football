@@ -6,13 +6,8 @@ import logging
 from collections.abc import Sequence
 from pathlib import Path
 
-PARQUET_TABLES = (
-    "team_snapshots",
-    "player_snapshots",
-    "team_metadata",
-    "league_metadata",
-    "player_metadata",
-)
+from fantasy_football.constants import PARQUET_TABLES
+
 logger = logging.getLogger(__name__)
 
 

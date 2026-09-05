@@ -8,9 +8,7 @@ from typing import Any
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-ESPN_SCHEDULE_URL = (
-    "https://site.web.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
-)
+from fantasy_football.constants import ESPN_SCHEDULE_URL
 
 
 def _parse_start_time(value: Any) -> datetime:
