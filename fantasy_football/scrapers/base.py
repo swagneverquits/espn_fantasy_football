@@ -142,9 +142,9 @@ class Scraper(ABC):
                     )
                     eastern = ZoneInfo("America/New_York")
                     window_summary = [
-                        "  # | opens (ET)          | closes (ET)",
+                        "  # | NFL wk | games | opens (ET)          | closes (ET)",
                         *[
-                            f" {index:2d} | {window.start.astimezone(eastern):%a %m/%d %I:%M %p} | {window.end.astimezone(eastern):%a %m/%d %I:%M %p}"
+                            f" {index:2d} | {','.join(map(str, window.nfl_weeks)) or '-':7} | {window.game_count:5d} | {window.start.astimezone(eastern):%a %m/%d %I:%M %p} | {window.end.astimezone(eastern):%a %m/%d %I:%M %p}"
                             for index, window in enumerate(windows, start=1)
                         ],
                     ]

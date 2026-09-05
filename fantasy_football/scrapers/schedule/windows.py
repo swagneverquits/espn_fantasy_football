@@ -9,7 +9,8 @@ from fantasy_football.constants import (
     DEFAULT_GAME_WINDOW_SECONDS,
     DEFAULT_PREGAME_BUFFER_SECONDS,
 )
-from fantasy_football.scrapers.schedule import fetch_nfl_game_starts
+
+from .scraper import NFLGame
 
 
 @dataclass(frozen=True)
@@ -18,42 +19,58 @@ class GameWindow:
 
     start: datetime
     end: datetime
+    game_count: int = 1
+    nfl_weeks: tuple[int, ...] = ()
 
 
 def _utc(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
+    return (
+        value.replace(tzinfo=timezone.utc)
+        if value.tzinfo is None
+        else value.astimezone(timezone.utc)
+    )
 
 
 def build_game_windows(
-    game_starts: list[datetime],
+    games: list[datetime | NFLGame],
     *,
     pregame_seconds: int = DEFAULT_PREGAME_BUFFER_SECONDS,
     duration_seconds: int = DEFAULT_GAME_WINDOW_SECONDS,
 ) -> tuple[GameWindow, ...]:
-    """Build and merge polling windows around game start times."""
-    windows = sorted(
-        (
+    """Build and merge polling windows while retaining game metadata."""
+    windows = []
+    for game in games:
+        kickoff = game.kickoff if isinstance(game, NFLGame) else game
+        nfl_weeks = (
+            ()
+            if not isinstance(game, NFLGame) or game.nfl_week is None
+            else (game.nfl_week,)
+        )
+        windows.append(
             GameWindow(
-                _utc(start) - timedelta(seconds=pregame_seconds),
-                _utc(start) + timedelta(seconds=duration_seconds),
+                _utc(kickoff) - timedelta(seconds=pregame_seconds),
+                _utc(kickoff) + timedelta(seconds=duration_seconds),
+                1,
+                nfl_weeks,
             )
-            for start in game_starts
-        ),
-        key=lambda window: window.start,
-    )
+        )
+    windows.sort(key=lambda window: window.start)
     merged: list[GameWindow] = []
     for window in windows:
         if not merged or window.start > merged[-1].end:
             merged.append(window)
         else:
-            merged[-1] = GameWindow(merged[-1].start, max(merged[-1].end, window.end))
+            prior = merged[-1]
+            merged[-1] = GameWindow(
+                prior.start,
+                max(prior.end, window.end),
+                prior.game_count + window.game_count,
+                tuple(sorted(set(prior.nfl_weeks + window.nfl_weeks))),
+            )
     return tuple(merged)
 
 
 def active_window(windows: tuple[GameWindow, ...], now: datetime) -> GameWindow | None:
-    """Return the current window, if polling should be active."""
     now = _utc(now)
     return next(
         (window for window in windows if window.start <= now <= window.end), None
@@ -63,7 +80,6 @@ def active_window(windows: tuple[GameWindow, ...], now: datetime) -> GameWindow 
 def seconds_until_next_window(
     windows: tuple[GameWindow, ...], now: datetime
 ) -> float | None:
-    """Return seconds until the next window starts, or None if there is none."""
     now = _utc(now)
     future = [window.start for window in windows if window.start > now]
     if not future:
