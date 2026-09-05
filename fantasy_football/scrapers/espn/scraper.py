@@ -82,6 +82,7 @@ def main(
     retry_seconds: int = 30,
     once: bool = False,
     schedule_gate: bool = True,
+    storage_mode: str = "local",
 ):
     return ESPNScraper(league, season=season, storage_mode=storage_mode).run(
         interval_seconds=interval_seconds,
