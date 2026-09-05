@@ -7,10 +7,12 @@ Tools for collecting live fantasy matchup data from ESPN and Sleeper, storing no
 ```text
 fantasy_football/
   constants.py          Shared paths, API endpoints, column names, and defaults
-  config.py             TOML league configuration loading
+  config.py             Explicit TOML league configuration loading
   storage/              Raw Parquet objects, snapshot pipeline, and DuckDB queries
   scrapers/             Shared lifecycle plus ESPN, Sleeper, and schedule implementations
-  analysis/plotting.py   Matchup plotting
+  snapshot.py           Shared five-table DataFrame contract
+  runner.py             Polling, scheduling, retries, and worker supervision
+  plotting/             Render matchup figures from loaded DataFrames
 config/
   leagues.toml.example  Checked-in configuration template
 fantasy_football/cli.py  Unified scraping, sync, and analysis entry point
@@ -27,7 +29,7 @@ conda activate espn-fantasy-football
 Copy-Item config/leagues.toml.example config/leagues.toml
 ```
 
-Edit `config/leagues.toml` with the leagues to track. The local file is ignored by Git. League IDs are numeric TOML values.
+Edit `config/leagues.toml` with the leagues to track. The local file is ignored by Git. League IDs are numeric TOML values. To select another file, put `--config PATH` before the command. CLI help, sync, and scraping a Sleeper league by ID do not require this file.
 
 Local storage is the default and saves raw `.pq` objects under `results/parquet`. On the server, select `--storage gcs`, set `GCS_BUCKET`, and authenticate with Google Application Default Credentials to upload each completed object directly to GCS. DuckDB reads the raw local objects for analysis; no compaction step is required.
 
@@ -79,10 +81,20 @@ For Sleeper, use the configured TOML league name and `--provider sleeper`. Plots
 
 ```powershell
 python -m unittest discover -s tests -v
-black fantasy_football scripts tests
-isort fantasy_football scripts tests
+black fantasy_football tests
+isort fantasy_football tests
 ```
 
 ### Schedule gate
 
 By default, polling is schedule-gated: the scraper starts 15 minutes before each NFL kickoff and remains active for four hours after it. Overlapping windows are merged, and gaps between game windows are left idle. Use `--no-schedule-gate` for continuous polling during debugging; `--once` always bypasses the gate.
+
+## Code boundaries
+
+Each provider implements `Scraper.fetch_snapshot() -> Snapshot`. Its parser produces the five normalized DataFrames using the shared schema in `snapshot.py`. Provider payloads and scoring rules stay under `scrapers/espn` and `scrapers/sleeper`.
+
+`Poller` handles timing and retries, while `run_all` supervises league workers. The writer accepts a `Snapshot` and handles Parquet persistence and metadata change detection. These changes preserve the existing object paths and persisted columns.
+
+DuckDB returns the stored snake_case columns plus team/league names. Plotting accepts those DataFrames directly and converts Unix timestamps to Eastern Time for display. Configuration and database queries are handled by the CLI, outside rendering.
+
+Tests are grouped by provider, runner, CLI/configuration, storage pipeline, sync, schedule, and plotting.

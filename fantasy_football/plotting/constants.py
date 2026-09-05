@@ -27,12 +27,10 @@ HOUR_SIZE = 9
 ANNOTATION_SIZE = 9
 
 # Normalized plotting columns
-TIME_COL = "time"
-TEAM_COL = "team"
-MATCHUP_COL = "Matchup"
-SCORE_COL = "Score"
-PROJECTED_COL = "Projected"
-WIN_CHANCE_COL = "WinChance"
+TEAM_COL = "team_name"
+SCORE_COL = "score_live"
+PROJECTED_COL = "projected_live"
+WIN_CHANCE_COL = "win_probability"
 LEAGUE_NAME_COL = "league_name"
 # Edge-axis scale
 EDGE_LIMIT = 50

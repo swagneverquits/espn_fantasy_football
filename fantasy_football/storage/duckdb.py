@@ -63,13 +63,8 @@ def load_matchup_results(
 
     query = f"""
         SELECT
-            s.{TIMESTAMP_COL} AS timestamp,
-            s.{TEAM_ID_COL} AS team_id,
-            s.matchup_id AS matchup_id,
-            s.score_live AS score,
-            s.projected_live AS projected,
-            s.win_probability AS win_chance,
-            {team_name} AS team,
+            s.*,
+            {team_name} AS team_name,
             {league_name} AS league_name
         FROM read_parquet({_sql_path(snapshot_glob)}, union_by_name=true) AS s
         {team_join}
@@ -78,17 +73,4 @@ def load_matchup_results(
     with duckdb.connect() as connection:
         result = connection.sql(query).fetchdf()
 
-    result["time"] = pd.to_datetime(
-        result.pop("timestamp"), unit="s", utc=True
-    ).dt.tz_convert("America/New_York")
-    result = result.rename(
-        columns={
-            "matchup_id": "Matchup",
-            "score": "Score",
-            "projected": "Projected",
-            "win_chance": "WinChance",
-        }
-    )
-    return result[
-        ["time", "team", "Matchup", "Score", "Projected", "WinChance", "league_name"]
-    ].set_index(["time", "team"])
+    return result

@@ -1,10 +1,11 @@
-"""Convert ESPN league API responses into enriched snapshot rows."""
+"""Normalize ESPN payloads into the common snapshot tables."""
 
-import datetime
-import json
 import logging
+import time
 
-import pandas as pd
+from fantasy_football.snapshot import Snapshot
+
+logger = logging.getLogger(__name__)
 
 
 def current_week(data: dict) -> int:
@@ -15,113 +16,134 @@ def current_week(data: dict) -> int:
     return int(week)
 
 
-def _serialized(value) -> str:
-    return json.dumps(value, separators=(",", ":"), default=str)
-
-
-def matchup_rows(data: dict, timestamp=None, matchup_period=None) -> pd.DataFrame:
-    """Return one enriched row for each team in the selected matchup period."""
-    timestamp = timestamp or datetime.datetime.now().astimezone()
-    team_records = {team["id"]: team for team in data.get("teams", [])}
-    team_names = {
-        team_id: team.get("name", str(team_id))
-        for team_id, team in team_records.items()
-    }
-    rows = []
-
+def parse_snapshot(
+    data: dict, *, league_id: str | int, season: int, timestamp: int | None = None
+) -> Snapshot:
+    timestamp = int(time.time()) if timestamp is None else timestamp
+    week = current_week(data)
+    teams = []
     for matchup in data.get("schedule", []):
-        if (
-            matchup_period is not None
-            and matchup.get("matchupPeriodId") != matchup_period
-        ):
+        if matchup.get("matchupPeriodId") != week:
             continue
-        for side, other_side in (("away", "home"), ("home", "away")):
-            team_data = matchup.get(side) or {}
-            team_id = team_data.get("teamId")
-            if team_id is None:
+        for side, other in (("away", "home"), ("home", "away")):
+            team = matchup.get(side) or {}
+            if team.get("teamId") is None:
                 continue
-            probability = team_data.get("winProbability")
-            if probability is None:
-                logging.warning(
+            if team.get("winProbability") is None:
+                logger.warning(
                     "Matchup %s team %s has no winProbability; skipping row",
                     matchup.get("id"),
-                    team_id,
+                    team["teamId"],
                 )
                 continue
-
-            opponent_id = (matchup.get(other_side) or {}).get("teamId")
-            team_record = team_records.get(team_id, {})
-            roster = team_data.get("rosterForCurrentScoringPeriod") or {}
-            rows.append(
-                (
-                    (timestamp, team_names.get(team_id, str(team_id))),
-                    {
-                        "Matchup": matchup.get("id"),
-                        "MatchupPeriod": matchup.get("matchupPeriodId"),
-                        "Winner": matchup.get("winner"),
-                        "team_id": team_id,
-                        "team_name": team_names.get(team_id, str(team_id)),
-                        "opponent_id": opponent_id,
-                        "opponent_name": team_names.get(opponent_id, str(opponent_id)),
-                        "home_or_away": side,
-                        "Score": team_data.get(
-                            "totalPointsLive", team_data.get("totalPoints")
-                        ),
-                        "TotalPoints": team_data.get("totalPoints"),
-                        "TotalPointsLive": team_data.get("totalPointsLive"),
-                        "WinChance": probability,
-                        "Projected": team_data.get("totalProjectedPointsLive"),
-                        "TotalProjectedPoints": team_data.get("totalProjectedPoints"),
-                        "TotalProjectedPointsLive": team_data.get(
-                            "totalProjectedPointsLive"
-                        ),
-                        "GamesPlayed": team_data.get("gamesPlayed"),
-                        "CumulativeScore": _serialized(
-                            team_data.get("cumulativeScore")
-                        ),
-                        "CumulativeScoreLive": _serialized(
-                            team_data.get("cumulativeScoreLive")
-                        ),
-                        "PointsByScoringPeriod": _serialized(
-                            team_data.get("pointsByScoringPeriod")
-                        ),
-                        "RosterAppliedStatTotal": roster.get("appliedStatTotal"),
-                        "RosterEntryCount": len(roster.get("entries", [])),
-                        "Roster": _serialized(roster),
-                        "Team": _serialized(team_record),
-                        "MatchupPayload": _serialized(matchup),
-                    },
-                )
+            score = team.get("totalPointsLive")
+            if score is None:
+                score = team.get("totalPoints")
+            teams.append(
+                {
+                    "matchup_id": matchup.get("id"),
+                    "team_id": team["teamId"],
+                    "opponent_id": (matchup.get(other) or {}).get("teamId"),
+                    "score_live": score,
+                    "projected_live": team.get("totalProjectedPointsLive"),
+                    "win_probability": team["winProbability"],
+                }
             )
-
-    columns = [
-        "Matchup",
-        "MatchupPeriod",
-        "Winner",
-        "team_id",
-        "team_name",
-        "opponent_id",
-        "opponent_name",
-        "home_or_away",
-        "Score",
-        "TotalPoints",
-        "TotalPointsLive",
-        "WinChance",
-        "Projected",
-        "TotalProjectedPoints",
-        "TotalProjectedPointsLive",
-        "GamesPlayed",
-        "CumulativeScore",
-        "CumulativeScoreLive",
-        "PointsByScoringPeriod",
-        "RosterAppliedStatTotal",
-        "RosterEntryCount",
-        "Roster",
-        "Team",
-        "MatchupPayload",
+    metadata = [
+        {
+            "team_id": team.get("id"),
+            "team_name": team.get("name"),
+            "logo_url": team.get("logo"),
+        }
+        for team in data.get("teams", [])
     ]
-    if not rows:
-        return pd.DataFrame(columns=columns)
-    frame = pd.DataFrame(dict(rows)).T
-    frame.index.names = ["time", "team"]
-    return frame
+    players, player_metadata = _player_data(data, league_id, season, week, timestamp)
+    return Snapshot.from_records(
+        provider="espn",
+        league_id=league_id,
+        season=season,
+        matchup_period=week,
+        timestamp=timestamp,
+        league_name=(data.get("settings") or {}).get("name") or data.get("name"),
+        team_snapshots=teams,
+        team_metadata=metadata,
+        player_snapshots=players,
+        player_metadata=player_metadata,
+    )
+
+
+def _player_data(
+    data: dict, league_id: str | int, season: int, week: int, timestamp: int
+) -> tuple[list[tuple], list[tuple]]:
+    snapshots = []
+    metadata = {}
+    scoring_period = (
+        data.get("scoringPeriodId")
+        or (data.get("status") or {}).get("currentScoringPeriod")
+        or week
+    )
+    for matchup in data.get("schedule", []):
+        if matchup.get("matchupPeriodId") != week:
+            continue
+        for side in ("away", "home"):
+            team = matchup.get(side) or {}
+            roster = team.get("rosterForCurrentScoringPeriod") or {}
+            for entry in roster.get("entries", []):
+                player = (entry.get("playerPoolEntry") or {}).get("player") or {}
+                player_id = player.get("id")
+                if player_id is None:
+                    continue
+                stats = player.get("stats") or []
+                current = next(
+                    (
+                        stat
+                        for stat in stats
+                        if stat.get("scoringPeriodId") == scoring_period
+                        and stat.get("statSourceId") == 1
+                    ),
+                    {},
+                )
+                actual = next(
+                    (
+                        stat
+                        for stat in stats
+                        if stat.get("scoringPeriodId") == scoring_period
+                        and stat.get("statSourceId") == 0
+                    ),
+                    {},
+                )
+                projected = current.get("appliedTotal")
+                ceiling = current.get("appliedTotalCeiling")
+                spread = (
+                    ceiling - projected
+                    if ceiling is not None and projected is not None
+                    else None
+                )
+                snapshots.append(
+                    (
+                        "espn",
+                        str(league_id),
+                        season,
+                        week,
+                        matchup.get("id"),
+                        timestamp,
+                        team.get("teamId"),
+                        player_id,
+                        entry.get("lineupSlotId"),
+                        actual.get("appliedTotal"),
+                        projected,
+                        ceiling,
+                        spread,
+                    )
+                )
+                metadata[player_id] = (
+                    "espn",
+                    str(league_id),
+                    season,
+                    week,
+                    player_id,
+                    timestamp,
+                    player.get("fullName"),
+                    player.get("defaultPositionId"),
+                )
+    return snapshots, list(metadata.values())

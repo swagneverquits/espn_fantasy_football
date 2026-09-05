@@ -1,92 +1,20 @@
-"""ESPN Fantasy Football scraper."""
+"""ESPN snapshot acquisition."""
 
-import pandas as pd
+from fantasy_football.constants import DEFAULT_SEASON
+from fantasy_football.snapshot import Snapshot
 
-from fantasy_football.config import LEAGUE_IDS
-from fantasy_football.storage.pipeline import configured_writer
-
-from ..base import JSONData, Scraper
+from ..base import Scraper
 from .client import fetch_league_data
-from .parser import current_week, matchup_rows
+from .parser import parse_snapshot
 
 
 class ESPNScraper(Scraper):
-    provider = "ESPN"
+    provider = "espn"
 
-    def __init__(self, league: str, *, season: int = 2026, storage_mode: str = "local"):
-        if league not in LEAGUE_IDS:
-            raise ValueError(f"Unknown league '{league}'")
-        self.league = league
-        self.league_id = LEAGUE_IDS[league]
+    def __init__(self, league_id: str | int, *, season: int = DEFAULT_SEASON):
+        self.league_id = str(league_id)
         self.season = season
-        self.snapshot_writer = configured_writer(storage_mode)
 
-    def get_league_metadata(self) -> JSONData:
-        """Fetch ESPN's combined league payload."""
-        return fetch_league_data(self.season, self.league_id)
-
-    def get_team_metadata(self, league_metadata: JSONData) -> JSONData:
-        return league_metadata
-
-    def get_player_metadata(
-        self, league_metadata: JSONData, team_metadata: JSONData
-    ) -> JSONData:
-        return league_metadata
-
-    def get_live_snapshot(
-        self,
-        league_metadata: JSONData,
-        team_metadata: JSONData,
-        player_metadata: JSONData,
-    ) -> JSONData:
-        return league_metadata
-
-    def normalize_snapshot(
-        self,
-        league_metadata: JSONData,
-        team_metadata: JSONData,
-        player_metadata: JSONData,
-        live_snapshot: JSONData,
-    ) -> pd.DataFrame:
-        week = current_week(live_snapshot)
-        return matchup_rows(live_snapshot, matchup_period=week)
-
-    def persist_snapshot(
-        self,
-        league_metadata: JSONData,
-        team_metadata: JSONData,
-        player_metadata: JSONData,
-        live_snapshot: JSONData,
-        frame: pd.DataFrame,
-    ) -> int:
-        week = current_week(live_snapshot)
-        rows = len(frame)
-        if not rows:
-            return 0
-        self.snapshot_writer.write(
-            frame,
-            provider="espn",
-            league_id=self.league_id,
-            season=self.season,
-            matchup_period=week,
-            data=live_snapshot,
-        )
-        return rows
-
-
-def main(
-    league: str,
-    *,
-    season: int = 2026,
-    interval_seconds: int = 30,
-    retry_seconds: int = 30,
-    once: bool = False,
-    schedule_gate: bool = True,
-    storage_mode: str = "local",
-):
-    return ESPNScraper(league, season=season, storage_mode=storage_mode).run(
-        interval_seconds=interval_seconds,
-        retry_seconds=retry_seconds,
-        once=once,
-        schedule_gate=schedule_gate,
-    )
+    def fetch_snapshot(self) -> Snapshot:
+        data = fetch_league_data(self.season, int(self.league_id))
+        return parse_snapshot(data, league_id=self.league_id, season=self.season)

@@ -7,9 +7,9 @@ from pathlib import Path
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import pandas as pd
-from matplotlib.font_manager import FontProperties
 
-from fantasy_football.analysis.constants import (
+from fantasy_football.constants import MATCHUP_ID_COL, TEAM_ID_COL, TIMESTAMP_COL
+from fantasy_football.plotting.constants import (
     ANNOTATION_SIZE,
     AXIS_TITLE_SIZE,
     DATE_SIZE,
@@ -21,18 +21,13 @@ from fantasy_football.analysis.constants import (
     HOUR_SIZE,
     LEAGUE_NAME_COL,
     MAIN_TITLE_SIZE,
-    MATCHUP_COL,
     PROJECTED_COL,
     SCORE_COL,
     TEAM_COL,
     TEAM_COLORS,
     TICK_SIZE,
-    TIME_COL,
     WIN_CHANCE_COL,
 )
-from fantasy_football.config import ESPN_LEAGUES, SLEEPER_LEAGUES
-from fantasy_football.constants import PARQUET_DIR, PLOTS_DIR
-from fantasy_football.storage.duckdb import load_matchup_results
 
 
 def plot_matchup(
@@ -48,15 +43,27 @@ def plot_matchup(
     # Normalize the input and identify the two teams and game-day windows.
     plt.rcParams["font.family"] = "Segoe UI"
     data = matchup_df.copy()
-    data[TIME_COL] = pd.to_datetime(data[TIME_COL])
-    data = data.sort_values(TIME_COL)
-    teams = list(data[TEAM_COL].drop_duplicates())[:2]
+    if pd.api.types.is_numeric_dtype(data[TIMESTAMP_COL]):
+        data[TIMESTAMP_COL] = pd.to_datetime(
+            data[TIMESTAMP_COL], unit="s", utc=True
+        ).dt.tz_convert("America/New_York")
+    else:
+        data[TIMESTAMP_COL] = pd.to_datetime(data[TIMESTAMP_COL])
+    data = data.sort_values(TIMESTAMP_COL)
+    team_ids = list(data[TEAM_ID_COL].drop_duplicates())
+    teams = [
+        data.loc[data[TEAM_ID_COL].eq(team_id), TEAM_COL].iloc[-1]
+        for team_id in team_ids
+    ]
     if len(teams) != 2:
         raise ValueError("matchup_df must contain exactly two teams")
     day_names = list(days)
     day_dates = {day: _date_for_day(data, day) for day in day_names}
     widths = [_day_width(data, day_dates[day]) for day in day_names]
-    frames = [data[data[TEAM_COL].eq(team)].set_index("time") for team in teams]
+    frames = [
+        data[data[TEAM_ID_COL].eq(team_id)].set_index(TIMESTAMP_COL)
+        for team_id in team_ids
+    ]
     # Create aligned Edge and Points panels for each game day.
     fig, axes = plt.subplots(
         2,
@@ -109,9 +116,7 @@ def plot_matchup(
         # Apply shared scales, grids, spines, and date-axis formatting.
         edge_ax.set_title("")
         edge_ax.set_ylim(-EDGE_LIMIT, EDGE_LIMIT)
-        edge_ax.set_yticks(
-            [-50, -25, 0, 25, 50], labels=["100%", "75%", "Even", "75%", "100%"]
-        )
+        edge_ax.set_yticks(EDGE_TICKS, labels=EDGE_TICK_LABELS)
         edge_ax.grid(axis="y", color="#d8d8d8", lw=0.7)
         edge_ax.spines[["top", "right", "left"]].set_visible(False)
         edge_ax.spines["bottom"].set_linewidth(0.6)
@@ -123,8 +128,12 @@ def plot_matchup(
         points_ax.tick_params(axis="y", labelsize=TICK_SIZE)
         if col:
             points_ax.tick_params(axis="y", left=False, labelleft=False)
-        points_ax.xaxis.set_major_locator(mdates.HourLocator(interval=3))
-        points_ax.xaxis.set_major_formatter(mdates.DateFormatter("%I %p"))
+        points_ax.xaxis.set_major_locator(
+            mdates.HourLocator(interval=3, tz="America/New_York")
+        )
+        points_ax.xaxis.set_major_formatter(
+            mdates.DateFormatter("%I %p", tz="America/New_York")
+        )
         points_ax.tick_params(axis="x", labelsize=HOUR_SIZE, pad=2)
         points_ax.set_xlabel(
             f"{day} {_format_date(date)}",
@@ -132,10 +141,14 @@ def plot_matchup(
             fontweight="medium",
             labelpad=6,
         )
-        day_data = data[data[TIME_COL].dt.date == date]
+        day_data = data[data[TIMESTAMP_COL].dt.date == date]
         if not day_data.empty:
-            edge_ax.set_xlim(day_data[TIME_COL].min(), day_data[TIME_COL].max())
-            points_ax.set_xlim(day_data[TIME_COL].min(), day_data[TIME_COL].max())
+            edge_ax.set_xlim(
+                day_data[TIMESTAMP_COL].min(), day_data[TIMESTAMP_COL].max()
+            )
+            points_ax.set_xlim(
+                day_data[TIMESTAMP_COL].min(), day_data[TIMESTAMP_COL].max()
+            )
         edge_ax.grid(axis="x", color="#ededed", lw=0.5)
         points_ax.grid(axis="x", color="#ededed", lw=0.5)
     # Add matchup-level team labels and the realized/projected legend.
@@ -184,16 +197,16 @@ def plot_matchup(
 
 
 def _date_for_day(data: pd.DataFrame, day: str):
-    matches = data[data[TIME_COL].dt.day_name().eq(day)]
-    return matches["time"].dt.date.iloc[0] if not matches.empty else None
+    matches = data[data[TIMESTAMP_COL].dt.day_name().eq(day)]
+    return matches[TIMESTAMP_COL].dt.date.iloc[0] if not matches.empty else None
 
 
 def _day_width(data: pd.DataFrame, date) -> float:
     if date is None:
         return 1.0
-    day = data[data[TIME_COL].dt.date == date]
+    day = data[data[TIMESTAMP_COL].dt.date == date]
     return (
-        max((day["time"].max() - day["time"].min()).total_seconds(), 1.0)
+        max((day[TIMESTAMP_COL].max() - day[TIMESTAMP_COL].min()).total_seconds(), 1.0)
         if not day.empty
         else 1.0
     )
@@ -203,57 +216,43 @@ def _format_date(date) -> str:
     return f"{date.month}/{date.day}" if date is not None else ""
 
 
-def normalize_team_names(matchup_df: pd.DataFrame) -> pd.DataFrame:
-    """Use the latest name for each matchup slot throughout the plot."""
-    updated = []
-    for _, matchup in matchup_df.sort_index().groupby("Matchup", group_keys=False):
-        matchup = matchup.reset_index()
-        matchup["slot"] = matchup.groupby(TIME_COL).cumcount()
-        latest_names = matchup.groupby("slot").tail(1).set_index("slot")[TEAM_COL]
-        matchup[TEAM_COL] = matchup["slot"].map(latest_names)
-        updated.append(matchup.set_index([TIME_COL, TEAM_COL]))
-    return pd.concat(updated).sort_index()
+def normalize_team_names(data: pd.DataFrame) -> pd.DataFrame:
+    """Use each team's latest name without relying on row ordering or display names."""
+    data = data.sort_values(TIMESTAMP_COL).copy()
+    keys = [MATCHUP_ID_COL, TEAM_ID_COL]
+    data[TEAM_COL] = data.groupby(keys)[TEAM_COL].transform("last")
+    return data
 
 
 def generate_matchup_plots(
-    season: int, week: int, league: str, provider: str = "espn"
+    data: pd.DataFrame,
+    *,
+    week: int | str,
+    output_dir: str | Path,
+    league_name: str,
 ) -> list[Path]:
-    """Generate one common-format plot per matchup in a league week."""
-    leagues = ESPN_LEAGUES if provider == "espn" else SLEEPER_LEAGUES
-    if league not in leagues:
-        valid_leagues = ", ".join(sorted(leagues))
-        raise ValueError(f"Unknown league '{league}'. Expected one of: {valid_leagues}")
-
-    output_dir = PLOTS_DIR / str(season) / league / f"week_{week}"
-    data = normalize_team_names(
-        load_matchup_results(
-            PARQUET_DIR,
-            provider=provider,
-            league_id=leagues[league],
-            season=season,
-            matchup_period=week,
-        )
-    ).reset_index()
-    matchup_ids = sorted(data[MATCHUP_COL].dropna().unique())
-    league_name = (
-        data[LEAGUE_NAME_COL].dropna().iloc[0]
-        if data[LEAGUE_NAME_COL].notna().any()
-        else league
+    """Render every matchup from already loaded data; no configuration or queries."""
+    if data.empty:
+        return []
+    data = normalize_team_names(data)
+    if data[LEAGUE_NAME_COL].notna().any():
+        league_name = data[LEAGUE_NAME_COL].dropna().iloc[-1]
+    dates = pd.to_datetime(data[TIMESTAMP_COL], unit="s", utc=True).dt.tz_convert(
+        "America/New_York"
     )
-
-    output_dir.mkdir(parents=True, exist_ok=True)
     paths = []
-    for matchup_number, matchup_id in enumerate(matchup_ids, start=1):
-        matchup = data[data[MATCHUP_COL].eq(matchup_id)].copy()
-        days = list(pd.to_datetime(matchup[TIME_COL]).dt.day_name().drop_duplicates())
-        path = output_dir / f"matchup{matchup_number}.png"
-        plot_matchup(
-            matchup,
-            league_name=league_name,
-            week=week,
-            matchup=matchup_number,
-            days=days,
-            savepath=path,
+    for number, (matchup_id, matchup) in enumerate(
+        data.groupby(MATCHUP_ID_COL, sort=True), start=1
+    ):
+        days = list(dates.loc[matchup.index].dt.day_name().drop_duplicates())
+        paths.append(
+            plot_matchup(
+                matchup,
+                league_name=league_name,
+                week=week,
+                matchup=matchup_id,
+                days=days,
+                savepath=Path(output_dir) / f"matchup{number}.png",
+            )
         )
-        paths.append(path)
     return paths

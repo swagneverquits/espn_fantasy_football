@@ -1,30 +1,54 @@
+import tempfile
 import unittest
+from pathlib import Path
 
 import pandas as pd
 
-from fantasy_football.analysis.plotting import normalize_team_names
+from fantasy_football.plotting import generate_matchup_plots
+from fantasy_football.plotting.plotting import normalize_team_names
 
 
 class PlottingTests(unittest.TestCase):
-    def test_normalize_team_names_uses_latest_name_per_slot(self):
-        df = pd.DataFrame(
+    def test_names_follow_team_ids_when_row_order_changes(self):
+        data = pd.DataFrame(
             [
-                ["2026-09-01 12:00:00", "Old A", 0, 10],
-                ["2026-09-01 12:00:00", "Team B", 0, 12],
-                ["2026-09-01 12:10:00", "New A", 0, 14],
-                ["2026-09-01 12:10:00", "Team B", 0, 15],
+                [1, "Old A", 7, 1],
+                [1, "B", 7, 2],
+                [2, "B", 7, 2],
+                [2, "New A", 7, 1],
             ],
-            columns=["time", "team", "Matchup", "Score"],
+            columns=["timestamp", "team_name", "matchup_id", "team_id"],
         )
-        df["time"] = pd.to_datetime(df["time"])
-        df = df.set_index(["time", "team"])
+        result = normalize_team_names(data)
+        self.assertEqual(
+            result.loc[result.team_id == 1, "team_name"].tolist(), ["New A", "New A"]
+        )
+        self.assertEqual(
+            result.loc[result.team_id == 2, "team_name"].tolist(), ["B", "B"]
+        )
 
-        teams = normalize_team_names(df).reset_index()["team"].tolist()
-
-        self.assertEqual(teams.count("New A"), 2)
-        self.assertEqual(teams.count("Team B"), 2)
-        self.assertNotIn("Old A", teams)
-
-
-if __name__ == "__main__":
-    unittest.main()
+    def test_render_normalized_data_to_png(self):
+        data = pd.DataFrame(
+            [
+                [1789066800, 1, "A", 7, 20, 100, 0.6, "Test League"],
+                [1789066800, 2, "B", 7, 18, 95, 0.4, "Test League"],
+                [1789066830, 1, "A", 7, 21, 101, 0.7, "Test League"],
+                [1789066830, 2, "B", 7, 18, 95, 0.3, "Test League"],
+            ],
+            columns=[
+                "timestamp",
+                "team_id",
+                "team_name",
+                "matchup_id",
+                "score_live",
+                "projected_live",
+                "win_probability",
+                "league_name",
+            ],
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            paths = generate_matchup_plots(
+                data, week=1, output_dir=directory, league_name="fallback"
+            )
+            self.assertEqual(len(paths), 1)
+            self.assertEqual(Path(paths[0]).read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
