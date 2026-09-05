@@ -32,3 +32,12 @@ MATCHUP_ID_COL = "matchup_id"
 TIMESTAMP_COL = "timestamp"
 TEAM_ID_COL = "team_id"
 COMMON_INDEX_COLS = (PROVIDER_COL, LEAGUE_ID_COL, SEASON_COL)
+
+# Parquet storage tables
+PARQUET_TABLES = (
+    "team_snapshots",
+    "player_snapshots",
+    "team_metadata",
+    "league_metadata",
+    "player_metadata",
+)

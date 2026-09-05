@@ -5,7 +5,7 @@ from fantasy_football.scrapers.espn.client import build_league_url
 from fantasy_football.scrapers.espn.parser import current_week, matchup_rows
 
 
-class APIScrapingTests(unittest.TestCase):
+class ESPNScrapingTests(unittest.TestCase):
     def setUp(self):
         self.data = {
             "scoringPeriodId": 3,

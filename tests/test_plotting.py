@@ -5,7 +5,7 @@ import pandas as pd
 from fantasy_football.analysis.plotting import normalize_team_names
 
 
-class CoreTests(unittest.TestCase):
+class PlottingTests(unittest.TestCase):
     def test_normalize_team_names_uses_latest_name_per_slot(self):
         df = pd.DataFrame(
             [

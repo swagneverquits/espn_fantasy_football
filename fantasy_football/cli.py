@@ -17,6 +17,8 @@ from fantasy_football.constants import (
     DEFAULT_INTERVAL_SECONDS,
     DEFAULT_RETRY_SECONDS,
     PARQUET_DIR,
+    PARQUET_TABLES,
+    PROJECT_ROOT,
 )
 from fantasy_football.scrapers.espn.scraper import main as run_espn
 from fantasy_football.scrapers.sleeper.scraper import main as run_sleeper
@@ -26,12 +28,35 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _add_polling_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--season", type=int, default=2026)
-    parser.add_argument("--interval", type=int, default=DEFAULT_INTERVAL_SECONDS)
-    parser.add_argument("--retry-interval", type=int, default=DEFAULT_RETRY_SECONDS)
-    parser.add_argument("--once", action="store_true")
-    parser.add_argument("--no-schedule-gate", action="store_true")
-    parser.add_argument("--storage", choices=("local", "gcs"), default="local")
+    parser.add_argument(
+        "--season", type=int, default=2026, help="NFL season to scrape (default: 2026)."
+    )
+    parser.add_argument(
+        "--interval",
+        type=int,
+        default=DEFAULT_INTERVAL_SECONDS,
+        help="Seconds between live snapshots (default: 30).",
+    )
+    parser.add_argument(
+        "--retry-interval",
+        type=int,
+        default=DEFAULT_RETRY_SECONDS,
+        help="Seconds to wait after a failed scrape (default: 30).",
+    )
+    parser.add_argument(
+        "--once", action="store_true", help="Run one snapshot and then exit."
+    )
+    parser.add_argument(
+        "--no-schedule-gate",
+        action="store_true",
+        help="Ignore NFL game windows and poll continuously.",
+    )
+    parser.add_argument(
+        "--storage",
+        choices=("local", "gcs"),
+        default="local",
+        help="Storage destination: local Parquet or Google Cloud Storage (default: local).",
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
