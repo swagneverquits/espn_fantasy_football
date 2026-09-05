@@ -29,7 +29,7 @@ Copy-Item config/leagues.toml.example config/leagues.toml
 
 Edit `config/leagues.toml` with the leagues to track. The local file is ignored by Git. League IDs are numeric TOML values.
 
-Without `GCS_BUCKET`, raw `.pq` Parquet objects are saved under `results/parquet`. On the server, set `GCS_BUCKET` and authenticate with Google Application Default Credentials to upload each completed object directly to GCS. DuckDB reads the raw local objects for analysis; no compaction step is required.
+Local storage is the default and saves raw `.pq` objects under `results/parquet`. On the server, select `--storage gcs`, set `GCS_BUCKET`, and authenticate with Google Application Default Credentials to upload each completed object directly to GCS. DuckDB reads the raw local objects for analysis; no compaction step is required.
 
 ## Collect data
 
@@ -50,9 +50,17 @@ Use `--storage gcs` with `GCS_BUCKET` set to upload to GCS; use `--storage local
 
 Each poll writes one `team_snapshots` object and one `player_snapshots` object per league/week. Metadata objects are written only on the first poll or when their values change. Object paths are partitioned by provider, league, season, week, table, and Unix timestamp.
 
+Sleeper checks the current NFL week every two hours and refreshes league/user metadata when the week changes. `scrape all --once` waits for every league to finish successfully; a failed worker stops the run with a nonzero exit code.
+
+Sleeper player IDs are stored as text, including defense abbreviations such as `PHI`. Starters without projections are retained with missing values. ESPN player points use actual stats for the current scoring period. If Sleeper's probability formula cannot accept the supplied scores/projections, the snapshot retains scores and stores a missing probability with a warning; it does not substitute a guessed percentage.
+
+Metadata hash state is written atomically and kept separately for local storage and each GCS bucket. Invalid state is rebuilt by writing metadata again. Upgrading from the older shared state files causes one fresh metadata write per league.
+
 ## Local analysis
 
 Incrementally download new Parquet objects from GCS into the local cache. For plotting, only the team and league tables are needed:
+
+Downloads use temporary files and are published only after completion. Existing files with an unexpected size are downloaded again.
 
 ```powershell
 python -m fantasy_football.cli sync --bucket YOUR_BUCKET --provider espn --league-id 123456789 --season 2026 --week 1 --tables team_snapshots team_metadata league_metadata

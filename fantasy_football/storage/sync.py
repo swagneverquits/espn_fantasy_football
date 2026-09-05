@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -45,11 +46,22 @@ def sync_parquet_prefix(
             ignored += 1
             continue
         destination = root / blob.name
-        if destination.exists():
+        if destination.exists() and destination.stat().st_size == blob.size:
             skipped += 1
             continue
         destination.parent.mkdir(parents=True, exist_ok=True)
-        blob.download_to_filename(destination)
+        # Publish only complete downloads; interrupted files are safe to retry.
+        with tempfile.NamedTemporaryFile(
+            dir=destination.parent, suffix=".part", delete=False
+        ) as file:
+            temporary = Path(file.name)
+        try:
+            blob.download_to_filename(temporary)
+            if blob.size is not None and temporary.stat().st_size != blob.size:
+                raise OSError(f"Incomplete download: {blob.name}")
+            temporary.replace(destination)
+        finally:
+            temporary.unlink(missing_ok=True)
         downloaded += 1
 
     logger.info(

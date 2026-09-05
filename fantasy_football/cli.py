@@ -172,7 +172,7 @@ def _run_all(args: argparse.Namespace) -> int:
                 (
                     (index, status)
                     for index, status in enumerate(statuses)
-                    if status is not None
+                    if status is not None and (not args.once or status != 0)
                 ),
                 None,
             )

@@ -6,6 +6,7 @@ import hashlib
 import json
 import logging
 import os
+import tempfile
 from pathlib import Path
 
 import pandas as pd
@@ -222,9 +223,19 @@ class ParquetSnapshotWriter:
         timestamp: int,
     ) -> None:
         state_path = self.state_path.with_name(
-            f".metadata_hashes_{provider}_{league_id}.json"
+            f"{self.state_path.stem}_{provider}_{league_id}.json"
         )
-        state = json.loads(state_path.read_text()) if state_path.exists() else {}
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            if not isinstance(state, dict):
+                raise ValueError("Expected a metadata hash object")
+        except FileNotFoundError:
+            state = {}
+        except (ValueError, UnicodeError):
+            logger.warning(
+                "Invalid metadata state at %s; rewriting metadata", state_path
+            )
+            state = {}
         changed = False
         changed_tables = []
         for table in ("team_metadata", "league_metadata", "player_metadata"):
@@ -249,7 +260,19 @@ class ParquetSnapshotWriter:
             changed_tables.append(table)
         if changed:
             state_path.parent.mkdir(parents=True, exist_ok=True)
-            state_path.write_text(json.dumps(state, indent=2))
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=state_path.parent,
+                suffix=".tmp",
+                delete=False,
+            ) as file:
+                temporary = Path(file.name)
+            try:
+                temporary.write_text(json.dumps(state, indent=2), encoding="utf-8")
+                temporary.replace(state_path)
+            finally:
+                temporary.unlink(missing_ok=True)
             logger.info(
                 "Metadata updated: provider=%s league=%s week=%s tables=%s",
                 provider,
@@ -262,13 +285,15 @@ class ParquetSnapshotWriter:
 def build_writer(
     root: str | Path = PARQUET_DIR, bucket: str | None = None
 ) -> ParquetSnapshotWriter:
-    """Build a local writer, optionally uploading each object to GCS as well."""
+    """Build a local or GCS writer with destination-specific metadata state."""
     local = LocalObjectUploader(root)
     uploader: ObjectUploader = local
     if bucket:
         uploader = GCSObjectUploader(bucket)
+    destination = f"gcs:{bucket}" if bucket else f"local:{Path(root).resolve()}"
+    namespace = hashlib.sha256(destination.encode()).hexdigest()[:16]
     return ParquetSnapshotWriter(
-        ParquetObjectStore(uploader), Path(root) / ".metadata_hashes.json"
+        ParquetObjectStore(uploader), Path(root) / f".metadata_hashes_{namespace}.json"
     )
 
 

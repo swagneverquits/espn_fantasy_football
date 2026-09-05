@@ -29,6 +29,11 @@ def _espn_player_data(
 ):
     snapshots = []
     metadata = {}
+    scoring_period = (
+        data.get("scoringPeriodId")
+        or (data.get("status") or {}).get("currentScoringPeriod")
+        or week
+    )
     for matchup in data.get("schedule", []):
         if matchup.get("matchupPeriodId") != week:
             continue
@@ -45,10 +50,19 @@ def _espn_player_data(
                     (
                         stat
                         for stat in stats
-                        if stat.get("scoringPeriodId") == week
+                        if stat.get("scoringPeriodId") == scoring_period
                         and stat.get("statSourceId") == 1
                     ),
-                    stats[0] if stats else {},
+                    {},
+                )
+                actual = next(
+                    (
+                        stat
+                        for stat in stats
+                        if stat.get("scoringPeriodId") == scoring_period
+                        and stat.get("statSourceId") == 0
+                    ),
+                    {},
                 )
                 projected = current.get("appliedTotal")
                 ceiling = current.get("appliedTotalCeiling")
@@ -68,7 +82,7 @@ def _espn_player_data(
                         team.get("teamId"),
                         player_id,
                         entry.get("lineupSlotId"),
-                        None,
+                        actual.get("appliedTotal"),
                         projected,
                         ceiling,
                         spread,
@@ -105,14 +119,17 @@ def _sleeper_player_data(
     }
     for matchup in data.get("matchups", []):
         for slot, player_id in enumerate(matchup.get("starters") or []):
+            if player_id is None or str(player_id) in {"", "0"}:
+                continue
             player_key = str(player_id)
             projection = projections.get(player_key, {})
             projected = (projection.get("stats") or {}).get(scoring_key)
-            if projected is None or not player_key.isdigit():
-                continue
-            player = projection.get("player") or {}
-            actual = (stats.get(player_key, {}).get("stats") or {}).get(scoring_key)
-            numeric_id = int(player_key)
+            stat = stats.get(player_key, {})
+            player = projection.get("player") or stat.get("player") or {}
+            # Matchup points include league-specific scoring; stats are a fallback.
+            actual = (matchup.get("players_points") or {}).get(player_key)
+            if actual is None:
+                actual = (stat.get("stats") or {}).get(scoring_key)
             snapshots.append(
                 (
                     "sleeper",
@@ -122,7 +139,7 @@ def _sleeper_player_data(
                     matchup.get(MATCHUP_ID_COL),
                     timestamp,
                     matchup.get("roster_id"),
-                    numeric_id,
+                    player_key,
                     slot,
                     actual,
                     projected,
@@ -130,16 +147,17 @@ def _sleeper_player_data(
                     None,
                 )
             )
-            metadata[numeric_id] = (
+            metadata[player_key] = (
                 "sleeper",
                 str(league_id),
                 season,
                 week,
-                numeric_id,
+                player_key,
                 timestamp,
                 " ".join(
                     filter(None, [player.get("first_name"), player.get("last_name")])
-                ),
+                )
+                or None,
                 player.get("position"),
             )
     return snapshots, list(metadata.values())

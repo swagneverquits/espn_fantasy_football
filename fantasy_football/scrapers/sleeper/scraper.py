@@ -1,9 +1,11 @@
 """Sleeper fantasy football scraper."""
 
+import time
 from typing import Any
 
 import pandas as pd
 
+from fantasy_football.constants import DEFAULT_SCHEDULE_REFRESH_SECONDS
 from fantasy_football.storage.pipeline import configured_writer
 
 from ..base import JSONData, Scraper
@@ -20,19 +22,29 @@ class SleeperScraper(Scraper):
         self.league_id = str(league_id)
         self.season = season
         self._weekly_metadata: JSONData | None = None
+        self._next_metadata_refresh = 0.0
         self.snapshot_writer = configured_writer(storage_mode)
 
     def get_league_metadata(self) -> JSONData:
-        """Fetch league identity and users once for this scraper run."""
-        if self._weekly_metadata is None:
+        """Check NFL state periodically and refresh identity when the week changes."""
+        now = time.monotonic()
+        if self._weekly_metadata is None or now >= self._next_metadata_refresh:
+            state = fetch_json("/state/nfl")
+            week = int(state["week"])
+            if (
+                self._weekly_metadata is not None
+                and self._weekly_metadata["week"] == week
+            ):
+                self._next_metadata_refresh = now + DEFAULT_SCHEDULE_REFRESH_SECONDS
+                return self._weekly_metadata
             league = fetch_json(f"/league/{self.league_id}")
             users = fetch_json(f"/league/{self.league_id}/users")
-            state = fetch_json("/state/nfl")
             self._weekly_metadata = {
                 "league": league,
                 "users": users,
-                "week": int(state["week"]),
+                "week": week,
             }
+            self._next_metadata_refresh = now + DEFAULT_SCHEDULE_REFRESH_SECONDS
         return self._weekly_metadata
 
     def get_team_metadata(self, league_metadata: JSONData) -> list[dict[str, Any]]:

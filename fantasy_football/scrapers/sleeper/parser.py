@@ -71,15 +71,14 @@ def matchup_rows(data: dict, timestamp=None, matchup_period=None) -> pd.DataFram
         opponent_projected = projected_totals.get(opponent_id)
         win_chance = None
         if projected is not None and opponent_projected is not None:
-            win_chance = (
-                sleeper_win_percentage(
-                    actual,
-                    projected,
-                    opponent_actual,
-                    opponent_projected,
-                )[0]
-                / 100
+            percentages = sleeper_win_percentage(
+                actual,
+                projected,
+                opponent_actual,
+                opponent_projected,
             )
+            if percentages is not None:
+                win_chance = percentages[0] / 100
 
         team_name = roster_names[roster_id]
         rows.append(
