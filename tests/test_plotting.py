@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 
 from fantasy_football.plotting import generate_matchup_plots
-from fantasy_football.plotting.plotting import normalize_team_names
+from fantasy_football.plotting.plotting import _game_windows, normalize_team_names
 
 
 class PlottingTests(unittest.TestCase):
@@ -52,3 +52,25 @@ class PlottingTests(unittest.TestCase):
             )
             self.assertEqual(len(paths), 1)
             self.assertEqual(Path(paths[0]).read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
+
+
+class WindowTests(unittest.TestCase):
+    def test_midnight_is_continuous_but_evening_is_separate(self):
+        times = pd.to_datetime(
+            [
+                "2026-09-13 23:50",
+                "2026-09-14 00:10",
+                "2026-09-14 20:00",
+                "2026-09-14 20:20",
+            ]
+        ).tz_localize("America/New_York")
+        windows = _game_windows(pd.DataFrame({"timestamp": times}), 1800)
+        self.assertEqual(windows, [(times[0], times[1]), (times[2], times[3])])
+
+    def test_same_weekday_in_later_week_is_not_discarded(self):
+        times = pd.to_datetime(["2026-09-13 20:00", "2026-09-20 20:00"]).tz_localize(
+            "America/New_York"
+        )
+        self.assertEqual(
+            len(_game_windows(pd.DataFrame({"timestamp": times}), 1800)), 2
+        )

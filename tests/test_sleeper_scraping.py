@@ -126,3 +126,20 @@ class SleeperPlayerTests(unittest.TestCase):
         for actual, projected in [(120, 100), (float("nan"), 100), (20, float("inf"))]:
             with self.subTest(actual=actual, projected=projected):
                 self.assertIsNone(sleeper_win_percentage(actual, projected, 20, 100))
+
+
+class ProjectionCompletenessTests(unittest.TestCase):
+    def test_missing_starter_never_becomes_partial_total(self):
+        from fantasy_football.scrapers.sleeper.parser import _projected_totals
+
+        data = {
+            "matchups": [{"roster_id": 1, "starters": ["a", "b", "0"]}],
+            "player_data": {
+                "projections": [{"player_id": "a", "stats": {"pts_std": 20}}]
+            },
+        }
+        self.assertIsNone(_projected_totals(data)[1])
+        data["player_data"]["projections"].append(
+            {"player_id": "b", "stats": {"pts_std": 0}}
+        )
+        self.assertEqual(_projected_totals(data)[1], 20)

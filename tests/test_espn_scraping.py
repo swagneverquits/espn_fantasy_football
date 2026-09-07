@@ -77,7 +77,7 @@ class ESPNScrapingTests(unittest.TestCase):
         self.assertEqual(frame.loc[1, "win_probability"], 0.54)
         self.assertEqual(frame.loc[1, "projected_live"], 101.0)
 
-    def test_matchup_rows_skips_missing_probability(self):
+    def test_matchup_rows_preserves_missing_probability(self):
         data = {
             **self.data,
             "schedule": [
@@ -90,8 +90,8 @@ class ESPNScrapingTests(unittest.TestCase):
             ],
         }
         frame = parse_snapshot(data, league_id="123", season=2026).team_snapshots
-        self.assertEqual(len(frame), 1)
-        self.assertEqual(frame["team_id"].tolist(), [2])
+        self.assertEqual(len(frame), 2)
+        self.assertEqual(frame["team_id"].tolist(), [1, 2])
 
 
 class ESPNPlayerTests(unittest.TestCase):

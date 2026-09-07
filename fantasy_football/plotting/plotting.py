@@ -1,7 +1,6 @@
 """Prepare and generate compact matchup plots from Parquet snapshots."""
 
 import textwrap
-from collections.abc import Iterable
 from pathlib import Path
 
 import matplotlib.dates as mdates
@@ -13,7 +12,6 @@ from fantasy_football.plotting.constants import (
     ANNOTATION_SIZE,
     AXIS_TITLE_SIZE,
     DATE_SIZE,
-    DEFAULT_GAME_DAYS,
     EDGE_LIMIT,
     EDGE_TICK_LABELS,
     EDGE_TICKS,
@@ -37,7 +35,7 @@ def plot_matchup(
     week: int | str,
     matchup: int | str,
     savepath: str | Path,
-    days: Iterable[str] = DEFAULT_GAME_DAYS,
+    window_gap_seconds: int = 30 * 60,
 ) -> Path:
     """Save a compact mirrored-probability and points plot for one matchup."""
     # Normalize the input and identify the two teams and game-day windows.
@@ -57,9 +55,8 @@ def plot_matchup(
     ]
     if len(teams) != 2:
         raise ValueError("matchup_df must contain exactly two teams")
-    day_names = list(days)
-    day_dates = {day: _date_for_day(data, day) for day in day_names}
-    widths = [_day_width(data, day_dates[day]) for day in day_names]
+    windows = _game_windows(data, window_gap_seconds)
+    widths = [max((end - start).total_seconds(), 60) for start, end in windows]
     frames = [
         data[data[TEAM_ID_COL].eq(team_id)].set_index(TIMESTAMP_COL)
         for team_id in team_ids
@@ -67,7 +64,7 @@ def plot_matchup(
     # Create aligned Edge and Points panels for each game day.
     fig, axes = plt.subplots(
         2,
-        len(day_names),
+        len(windows),
         figsize=(10, 5),
         sharey="row",
         sharex="col",
@@ -86,10 +83,9 @@ def plot_matchup(
         ha="left",
     )
     # Render each day independently so discontinuities remain visible.
-    for col, day in enumerate(day_names):
-        date = day_dates[day]
+    for col, (start, end) in enumerate(windows):
         edge_ax, points_ax = axes[0, col], axes[1, col]
-        edge_data = frames[0][frames[0].index.date == date]
+        edge_data = frames[0][(frames[0].index >= start) & (frames[0].index <= end)]
         if not edge_data.empty:
             edge = (edge_data[WIN_CHANCE_COL] - 0.5) * 100
             x = edge_data.index
@@ -102,7 +98,7 @@ def plot_matchup(
             edge_ax.plot(x, edge, color="#222222", lw=1.8)
             edge_ax.axhline(0, color="#222222", ls="--", lw=1.0, zorder=3)
         for frame, color in zip(frames, TEAM_COLORS):
-            day_data = frame[frame.index.date == date]
+            day_data = frame[(frame.index >= start) & (frame.index <= end)]
             if not day_data.empty:
                 points_ax.plot(day_data.index, day_data[SCORE_COL], color=color, lw=2.0)
                 points_ax.plot(
@@ -136,12 +132,12 @@ def plot_matchup(
         )
         points_ax.tick_params(axis="x", labelsize=HOUR_SIZE, pad=2)
         points_ax.set_xlabel(
-            f"{day} {_format_date(date)}",
+            f"{start.day_name()} {start.month}/{start.day}",
             fontsize=DATE_SIZE,
             fontweight="medium",
             labelpad=6,
         )
-        day_data = data[data[TIMESTAMP_COL].dt.date == date]
+        day_data = data[data[TIMESTAMP_COL].between(start, end)]
         if not day_data.empty:
             edge_ax.set_xlim(
                 day_data[TIMESTAMP_COL].min(), day_data[TIMESTAMP_COL].max()
@@ -196,24 +192,15 @@ def plot_matchup(
     return output
 
 
-def _date_for_day(data: pd.DataFrame, day: str):
-    matches = data[data[TIMESTAMP_COL].dt.day_name().eq(day)]
-    return matches[TIMESTAMP_COL].dt.date.iloc[0] if not matches.empty else None
-
-
-def _day_width(data: pd.DataFrame, date) -> float:
-    if date is None:
-        return 1.0
-    day = data[data[TIMESTAMP_COL].dt.date == date]
-    return (
-        max((day[TIMESTAMP_COL].max() - day[TIMESTAMP_COL].min()).total_seconds(), 1.0)
-        if not day.empty
-        else 1.0
-    )
-
-
-def _format_date(date) -> str:
-    return f"{date.month}/{date.day}" if date is not None else ""
+def _game_windows(
+    data: pd.DataFrame, gap_seconds: int
+) -> list[tuple[pd.Timestamp, pd.Timestamp]]:
+    """Infer independent collection windows from gaps, including midnight crossings."""
+    if gap_seconds <= 0:
+        raise ValueError("window_gap_seconds must be positive")
+    times = data[TIMESTAMP_COL].drop_duplicates().sort_values()
+    groups = times.diff().dt.total_seconds().gt(gap_seconds).cumsum()
+    return [(group.iloc[0], group.iloc[-1]) for _, group in times.groupby(groups)]
 
 
 def normalize_team_names(data: pd.DataFrame) -> pd.DataFrame:
@@ -230,6 +217,7 @@ def generate_matchup_plots(
     week: int | str,
     output_dir: str | Path,
     league_name: str,
+    window_gap_seconds: int = 30 * 60,
 ) -> list[Path]:
     """Render every matchup from already loaded data; no configuration or queries."""
     if data.empty:
@@ -237,21 +225,17 @@ def generate_matchup_plots(
     data = normalize_team_names(data)
     if data[LEAGUE_NAME_COL].notna().any():
         league_name = data[LEAGUE_NAME_COL].dropna().iloc[-1]
-    dates = pd.to_datetime(data[TIMESTAMP_COL], unit="s", utc=True).dt.tz_convert(
-        "America/New_York"
-    )
     paths = []
     for number, (matchup_id, matchup) in enumerate(
         data.groupby(MATCHUP_ID_COL, sort=True), start=1
     ):
-        days = list(dates.loc[matchup.index].dt.day_name().drop_duplicates())
         paths.append(
             plot_matchup(
                 matchup,
                 league_name=league_name,
                 week=week,
                 matchup=matchup_id,
-                days=days,
+                window_gap_seconds=window_gap_seconds,
                 savepath=Path(output_dir) / f"matchup{number}.png",
             )
         )

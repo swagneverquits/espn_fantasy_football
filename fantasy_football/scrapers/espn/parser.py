@@ -31,11 +31,10 @@ def parse_snapshot(
                 continue
             if team.get("winProbability") is None:
                 logger.warning(
-                    "Matchup %s team %s has no winProbability; skipping row",
+                    "Matchup %s team %s has no winProbability; retaining scores",
                     matchup.get("id"),
                     team["teamId"],
                 )
-                continue
             score = team.get("totalPointsLive")
             if score is None:
                 score = team.get("totalPoints")
@@ -46,7 +45,7 @@ def parse_snapshot(
                     "opponent_id": (matchup.get(other) or {}).get("teamId"),
                     "score_live": score,
                     "projected_live": team.get("totalProjectedPointsLive"),
-                    "win_probability": team["winProbability"],
+                    "win_probability": team.get("winProbability"),
                 }
             )
     metadata = [

@@ -1,11 +1,15 @@
 """Normalize Sleeper payloads into the common snapshot tables."""
 
+import logging
+import math
 import time
 
 from fantasy_football.constants import MATCHUP_ID_COL
 from fantasy_football.snapshot import Snapshot
 
 from .win_probability import sleeper_win_percentage
+
+logger = logging.getLogger(__name__)
 
 
 def _projection_key(scoring_settings):
@@ -28,12 +32,31 @@ def _projected_totals(data):
     }
     totals = {}
     for matchup in data.get("matchups", []):
-        values = [
-            projection_map.get(str(player_id))
+        # Empty lineup slots aren't players; a real starter needs a finite estimate.
+        starters = [
+            str(player_id)
             for player_id in matchup.get("starters", [])
+            if player_id is not None and str(player_id) not in {"", "0"}
         ]
-        values = [float(value) for value in values if value is not None]
-        totals[matchup["roster_id"]] = sum(values) if values else None
+        values = []
+        missing = []
+        for player_id in starters:
+            try:
+                value = float(projection_map[player_id])
+                if not math.isfinite(value):
+                    raise ValueError("Non-finite projection")
+            except (KeyError, TypeError, ValueError, OverflowError):
+                missing.append(player_id)
+            else:
+                values.append(value)
+        roster_id = matchup["roster_id"]
+        totals[roster_id] = sum(values) if values and not missing else None
+        if missing:
+            logger.warning(
+                "Sleeper roster=%s projection incomplete: missing starters=%s",
+                roster_id,
+                ",".join(missing),
+            )
     return totals
 
 

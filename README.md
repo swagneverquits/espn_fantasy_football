@@ -100,3 +100,9 @@ DuckDB returns the stored snake_case columns plus team/league names. Plotting ac
 Tests are grouped by provider, runner, CLI/configuration, storage writer, sync, schedule, and plotting.
 
 Storage modules are organized by responsibility: `writer.py` saves snapshots and metadata state, `parquet.py` serializes and publishes objects and defines their shared partition paths, `sync.py` downloads them, and `duckdb.py` queries them. The CLI resolves storage environment settings. Local writes stage files on the destination filesystem before publishing them atomically.
+
+Plot panels follow collection windows inferred from timestamp gaps longer than 30 minutes (adjustable via `window_gap_seconds` in the plotting functions). Midnight does not split a window; labels use the window's starting date. Long collection outages will also create a panel break.
+
+The shared schedule cache uses OS-managed locks, released when the owner exits. The lock file can remain on disk without indicating ownership. Waiting workers only accept fresh cached schedules.
+
+Missing ESPN probabilities retain the team's score. Sleeper team projections require finite projections for every nonempty starter; incomplete totals and their probabilities remain missing. Matching the weekly projection inputs to Sleeper's live UI has not been verified: the historical stats endpoint returned HTTP 403 during the latest check. The current inputs must not be treated as confirmed live UI projections.

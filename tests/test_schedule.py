@@ -41,3 +41,56 @@ class ScheduleTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CacheTests(unittest.TestCase):
+    def test_existing_lock_file_does_not_prevent_refresh(self):
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from fantasy_football.scrapers.schedule import cache
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "schedule.json"
+            lock = path.with_suffix(".lock")
+            lock.write_bytes(b"0")
+            games = []
+            with (
+                patch.object(cache, "CACHE_PATH", path),
+                patch.object(cache, "LOCK_PATH", lock),
+                patch.object(
+                    cache, "fetch_nfl_game_starts", return_value=games
+                ) as fetch,
+            ):
+                self.assertEqual(
+                    cache.get_game_starts(
+                        datetime.now(timezone.utc), refresh_seconds=7200
+                    ),
+                    ([], True),
+                )
+                self.assertEqual(
+                    cache.get_game_starts(
+                        datetime.now(timezone.utc), refresh_seconds=7200
+                    ),
+                    ([], False),
+                )
+                fetch.assert_called_once()
+
+    def test_expired_cache_is_not_returned_while_lock_is_held(self):
+        from contextlib import contextmanager
+        from unittest.mock import patch
+
+        from fantasy_football.scrapers.schedule import cache
+
+        @contextmanager
+        def held():
+            yield False
+
+        with (
+            patch.object(cache, "_read_cache", return_value=([], 0)),
+            patch.object(cache, "_schedule_lock", held),
+            patch.object(cache, "LOCK_WAIT_SECONDS", 0),
+        ):
+            with self.assertRaises(TimeoutError):
+                cache.get_game_starts(datetime.now(timezone.utc), refresh_seconds=7200)
