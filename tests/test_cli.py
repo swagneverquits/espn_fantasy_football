@@ -94,3 +94,179 @@ class ConfigTests(unittest.TestCase):
                 once=True,
                 schedule_gate=True,
             )
+
+
+class AllLeagueTests(unittest.TestCase):
+    def config(self):
+        from fantasy_football.config import LeagueConfig
+
+        return LeagueConfig({"same": "1", "alias": "1"}, {"same": "2"})
+
+    def test_all_sync_is_concurrent_and_deduplicates_ids(self):
+        from threading import Barrier
+
+        barrier = Barrier(2)
+
+        def download(*args, **kwargs):
+            barrier.wait(timeout=5)
+            return 2
+
+        with (
+            patch("fantasy_football.cli.load_leagues", return_value=self.config()),
+            patch(
+                "fantasy_football.storage.sync.sync_parquet_prefix",
+                side_effect=download,
+            ) as sync,
+        ):
+            result = main(
+                [
+                    "sync",
+                    "--all",
+                    "--bucket",
+                    "test",
+                    "--season",
+                    "2026",
+                    "--week",
+                    "1",
+                    "--tables",
+                    "team_snapshots",
+                ]
+            )
+        self.assertEqual(result, 0)
+        self.assertEqual(sync.call_count, 2)
+        self.assertEqual(
+            {call.kwargs["provider"] for call in sync.call_args_list},
+            {"espn", "sleeper"},
+        )
+        self.assertTrue(
+            all(
+                call.kwargs["tables"] == ["team_snapshots"]
+                for call in sync.call_args_list
+            )
+        )
+
+    def test_provider_filter_and_sync_failure_status(self):
+        with (
+            patch("fantasy_football.cli.load_leagues", return_value=self.config()),
+            patch(
+                "fantasy_football.storage.sync.sync_parquet_prefix",
+                side_effect=OSError("offline"),
+            ) as sync,
+        ):
+            result = main(
+                [
+                    "sync",
+                    "--all",
+                    "--provider",
+                    "sleeper",
+                    "--bucket",
+                    "test",
+                    "--season",
+                    "2026",
+                    "--week",
+                    "1",
+                ]
+            )
+        self.assertEqual(result, 1)
+        self.assertEqual(sync.call_count, 1)
+        self.assertEqual(sync.call_args.kwargs["league_id"], "2")
+
+    def test_single_sync_still_works_without_config(self):
+        with (
+            patch("fantasy_football.cli.load_leagues") as config,
+            patch("fantasy_football.storage.sync.sync_parquet_prefix", return_value=0),
+        ):
+            self.assertEqual(
+                main(
+                    [
+                        "sync",
+                        "--provider",
+                        "espn",
+                        "--league-id",
+                        "1",
+                        "--bucket",
+                        "test",
+                        "--season",
+                        "2026",
+                        "--week",
+                        "1",
+                    ]
+                ),
+                0,
+            )
+            config.assert_not_called()
+
+    def test_all_plot_paths_include_provider(self):
+        import pandas as pd
+
+        with (
+            patch("fantasy_football.cli.load_leagues", return_value=self.config()),
+            patch(
+                "fantasy_football.storage.duckdb.load_matchup_results",
+                return_value=pd.DataFrame(),
+            ),
+            patch(
+                "fantasy_football.plotting.generate_matchup_plots",
+                return_value=[Path("test.png")],
+            ) as plot,
+        ):
+            self.assertEqual(
+                main(["analyze", "--all", "--season", "2026", "--week", "1"]), 0
+            )
+        paths = [call.kwargs["output_dir"] for call in plot.call_args_list]
+        self.assertEqual(len(set(paths)), 2)
+        self.assertTrue(any("espn" in path.parts for path in paths))
+        self.assertTrue(any("sleeper" in path.parts for path in paths))
+
+    def test_all_plot_skips_absent_leagues(self):
+        import pandas as pd
+
+        with (
+            patch("fantasy_football.cli.load_leagues", return_value=self.config()),
+            patch(
+                "fantasy_football.storage.duckdb.load_matchup_results",
+                side_effect=[FileNotFoundError(), pd.DataFrame()],
+            ),
+            patch(
+                "fantasy_football.plotting.generate_matchup_plots",
+                return_value=[Path("test.png")],
+            ),
+        ):
+            self.assertEqual(
+                main(["analyze", "--all", "--season", "2026", "--week", "1"]), 0
+            )
+
+    def test_conflicting_selection_is_rejected(self):
+        for command in (
+            [
+                "sync",
+                "--all",
+                "--league-id",
+                "1",
+                "--bucket",
+                "test",
+                "--season",
+                "2026",
+                "--week",
+                "1",
+            ],
+            ["analyze", "--all", "--league", "same", "--season", "2026", "--week", "1"],
+            [
+                "sync",
+                "--league-id",
+                "1",
+                "--bucket",
+                "test",
+                "--season",
+                "2026",
+                "--week",
+                "1",
+            ],
+        ):
+            with (
+                self.subTest(command=command),
+                contextlib.redirect_stderr(io.StringIO()),
+                self.assertRaises(SystemExit) as error,
+            ):
+                main(command)
+            self.assertEqual(error.exception.code, 2)

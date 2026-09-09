@@ -106,3 +106,16 @@ Plot panels follow collection windows inferred from timestamp gaps longer than 3
 The shared schedule cache uses OS-managed locks, released when the owner exits. The lock file can remain on disk without indicating ownership. Waiting workers only accept fresh cached schedules.
 
 Missing ESPN probabilities retain the team's score. Sleeper team projections require finite projections for every nonempty starter; incomplete totals and their probabilities remain missing. Matching the weekly projection inputs to Sleeper's live UI has not been verified: the historical stats endpoint returned HTTP 403 during the latest check. The current inputs must not be treated as confirmed live UI projections.
+
+## All-league local updates
+
+Use `--all` with sync and analyze to select leagues from `leagues.toml`. Add `--provider espn` or `--provider sleeper` to limit the selection. Season and week remain explicit; `--all` selects leagues, not historical weeks.
+
+```powershell
+python -m fantasy_football.cli sync --all --bucket YOUR_BUCKET --season 2026 --week 1 --tables team_snapshots team_metadata league_metadata
+python -m fantasy_football.cli analyze --all --season 2026 --week 1
+```
+
+Sync runs leagues concurrently (up to eight), preserves incremental downloads, and reports a nonzero exit status if any league fails. Other leagues finish even if one fails. Plotting runs sequentially and skips leagues without local snapshots; it returns nonzero for rendering failures or if no plots were generated. All-league plots go under `results/plots/<season>/<provider>/<league>/week_<week>/` to avoid name collisions across providers. Single-league commands keep their existing output paths.
+
+Scraping all leagues continues to use `scrape all`.

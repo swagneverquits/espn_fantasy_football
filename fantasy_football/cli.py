@@ -106,13 +106,31 @@ def build_parser() -> argparse.ArgumentParser:
     )
     analyze.add_argument("--season", type=int, required=True)
     analyze.add_argument("--week", type=int, required=True)
-    analyze.add_argument("--league", required=True)
-    analyze.add_argument("--provider", choices=("espn", "sleeper"), default="espn")
+    selection = analyze.add_mutually_exclusive_group(required=True)
+    selection.add_argument("--league", help="Configured league name.")
+    selection.add_argument(
+        "--all", action="store_true", help="Plot all configured leagues."
+    )
+    analyze.add_argument(
+        "--provider",
+        choices=("espn", "sleeper"),
+        help="Filter --all by provider; defaults to ESPN for a single league.",
+    )
 
-    sync = commands.add_parser("sync", help="Download one league/week from GCS.")
+    sync = commands.add_parser(
+        "sync", help="Download one or all leagues for a week from GCS."
+    )
     sync.add_argument("--bucket", required=True)
-    sync.add_argument("--provider", choices=("espn", "sleeper"), required=True)
-    sync.add_argument("--league-id", required=True)
+    sync.add_argument(
+        "--provider",
+        choices=("espn", "sleeper"),
+        help="Required for one league; optionally filters --all.",
+    )
+    selection = sync.add_mutually_exclusive_group(required=True)
+    selection.add_argument("--league-id", help="Provider league ID.")
+    selection.add_argument(
+        "--all", action="store_true", help="Sync all configured leagues concurrently."
+    )
     sync.add_argument("--season", type=int, required=True)
     sync.add_argument("--week", type=int, required=True)
     sync.add_argument("--output-dir", type=Path, default=PARQUET_DIR)
@@ -121,24 +139,110 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _analyze(args: argparse.Namespace) -> None:
+def _all_leagues(args: argparse.Namespace) -> list[tuple[str, str, str]]:
+    """Resolve configured names and IDs, with optional provider filtering."""
+    config = load_leagues(args.config)
+    targets = []
+    seen = set()
+    for provider, leagues in (("espn", config.espn), ("sleeper", config.sleeper)):
+        if args.provider is not None and args.provider != provider:
+            continue
+        for name, league_id in leagues.items():
+            if (provider, league_id) not in seen:
+                targets.append((provider, name, league_id))
+                seen.add((provider, league_id))
+    return targets
+
+
+def _sync(args: argparse.Namespace) -> int:
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    from fantasy_football.storage.sync import sync_parquet_prefix
+
+    targets = (
+        _all_leagues(args)
+        if args.all
+        else [(args.provider, args.league_id, args.league_id)]
+    )
+    if not targets:
+        logging.error("No configured leagues match the selection")
+        return 1
+    failed = False
+    total = 0
+    # Each league has a separate destination prefix and its own GCS client.
+    with ThreadPoolExecutor(max_workers=min(8, len(targets))) as pool:
+        futures = {
+            pool.submit(
+                sync_parquet_prefix,
+                args.bucket,
+                provider=provider,
+                league_id=league_id,
+                season=args.season,
+                matchup_period=args.week,
+                output_dir=args.output_dir,
+                tables=args.tables,
+            ): (provider, name)
+            for provider, name, league_id in targets
+        }
+        for future in as_completed(futures):
+            provider, name = futures[future]
+            try:
+                count = future.result()
+                total += count
+                logging.info("Synced %s/%s: %d new objects", provider, name, count)
+            except Exception:
+                failed = True
+                logging.exception("Sync failed: %s/%s", provider, name)
+    logging.info(
+        "Downloaded %d new Parquet objects across %d leagues", total, len(targets)
+    )
+    return int(failed)
+
+
+def _analyze(args: argparse.Namespace) -> int:
     from fantasy_football.plotting import generate_matchup_plots
     from fantasy_football.storage.duckdb import load_matchup_results
 
-    leagues = load_leagues(args.config)
-    league_id = leagues.league_id(args.provider, args.league)
-    data = load_matchup_results(
-        PARQUET_DIR,
-        provider=args.provider,
-        league_id=league_id,
-        season=args.season,
-        matchup_period=args.week,
-    )
-    output = PLOTS_DIR / str(args.season) / args.league / f"week_{args.week}"
-    for path in generate_matchup_plots(
-        data, week=args.week, output_dir=output, league_name=args.league
-    ):
-        print(path)
+    if args.all:
+        targets = _all_leagues(args)
+    else:
+        provider = args.provider or "espn"
+        league_id = load_leagues(args.config).league_id(provider, args.league)
+        targets = [(provider, args.league, league_id)]
+    failed = False
+    plotted = 0
+    # Matplotlib has shared state, so rendering stays sequential.
+    for provider, name, league_id in targets:
+        try:
+            data = load_matchup_results(
+                PARQUET_DIR,
+                provider=provider,
+                league_id=league_id,
+                season=args.season,
+                matchup_period=args.week,
+            )
+            output = PLOTS_DIR / str(args.season)
+            if args.all:
+                output = output / provider
+            output = output / name / f"week_{args.week}"
+            paths = generate_matchup_plots(
+                data, week=args.week, output_dir=output, league_name=name
+            )
+            for path in paths:
+                print(path)
+            plotted += len(paths)
+        except FileNotFoundError:
+            if not args.all:
+                raise
+            logging.warning("No local snapshots for %s/%s; skipping", provider, name)
+        except Exception:
+            if not args.all:
+                raise
+            failed = True
+            logging.exception("Plotting failed: %s/%s", provider, name)
+    if not plotted:
+        logging.warning("No plots generated for the selected leagues")
+    return int(failed or not plotted)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -178,20 +282,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             schedule_gate=options.schedule_gate,
         )
     elif args.command == "sync":
-        from fantasy_football.storage.sync import sync_parquet_prefix
-
-        count = sync_parquet_prefix(
-            args.bucket,
-            provider=args.provider,
-            league_id=args.league_id,
-            season=args.season,
-            matchup_period=args.week,
-            output_dir=args.output_dir,
-            tables=args.tables,
-        )
-        logging.info("Downloaded %d new Parquet objects", count)
+        if not args.all and args.provider is None:
+            parser.error("--provider is required with --league-id")
+        return _sync(args)
     else:
-        _analyze(args)
+        return _analyze(args)
     return 0
 
 
