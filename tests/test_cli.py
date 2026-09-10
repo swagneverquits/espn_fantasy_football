@@ -68,6 +68,7 @@ class ConfigTests(unittest.TestCase):
                 patch("fantasy_football.scrapers.espn.scraper.ESPNScraper") as scraper,
                 patch("fantasy_football.cli._configured_writer") as writer,
                 patch("fantasy_football.runner.Poller") as poller,
+                patch("fantasy_football.status.WorkerStatus") as status,
             ):
                 result = main(
                     [
@@ -87,7 +88,10 @@ class ConfigTests(unittest.TestCase):
             self.assertEqual(result, 0)
             scraper.assert_called_once_with("123", season=2026)
             writer.assert_called_once_with("gcs")
-            poller.assert_called_once_with(scraper.return_value, writer.return_value)
+            status.assert_called_once_with("espn", "123")
+            poller.assert_called_once_with(
+                scraper.return_value, writer.return_value, status=status.return_value
+            )
             poller.return_value.run.assert_called_once_with(
                 interval_seconds=45,
                 retry_seconds=30,

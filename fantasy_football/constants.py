@@ -1,12 +1,18 @@
 """Project-wide constants for external services and runtime defaults."""
 
 from pathlib import Path
+from tempfile import gettempdir
 
 # Project paths
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 LEAGUE_CONFIG_PATH = PROJECT_ROOT / "config" / "leagues.toml"
 PARQUET_DIR = PROJECT_ROOT / "results" / "parquet"
 PLOTS_DIR = PROJECT_ROOT / "results" / "plots"
+
+# Ephemeral worker monitoring (shared by processes inside the container)
+STATUS_DIR = Path(gettempdir()) / "fantasy-football-status"
+STATUS_HEARTBEAT_SECONDS = 5
+STATUS_STALE_SECONDS = 20
 
 # Runtime defaults
 DEFAULT_SEASON = 2026

@@ -119,3 +119,19 @@ python -m fantasy_football.cli analyze --all --season 2026 --week 1
 Sync runs leagues concurrently (up to eight), preserves incremental downloads, and reports a nonzero exit status if any league fails. Other leagues finish even if one fails. Plotting runs sequentially and skips leagues without local snapshots; it returns nonzero for rendering failures or if no plots were generated. All-league plots go under `results/plots/<season>/<provider>/<league>/week_<week>/` to avoid name collisions across providers. Single-league commands keep their existing output paths.
 
 Scraping all leagues continues to use `scrape all`.
+
+## Remote scraper dashboard
+
+After deploying the updated image, open the live dashboard over SSH:
+
+```bash
+sudo docker compose exec scraper python -m fantasy_football.cli status --watch
+```
+
+One row per configured league shows worker state, last scrape result, completed-at time in ET, last successful save, worker uptime, and failed scrape count. Success means both fetch and persistence completed; partial uploads are failures. Uptime and error counts reset when a worker restarts. Idle is normal outside game windows. Heartbeats older than 20 seconds show stale/offline; the displayed uptime then remains at its last recorded value.
+
+Ctrl+C closes only the dashboard. Omit `--watch` for a single table. Status files are ephemeral local files inside the container, not uploaded to GCS. Existing Docker logs remain unchanged:
+
+```bash
+sudo docker compose logs -f --tail=100 scraper
+```

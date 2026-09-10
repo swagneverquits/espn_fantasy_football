@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 import time
+from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -25,6 +26,7 @@ from fantasy_football.scrapers.schedule.windows import (
     build_game_windows,
     seconds_until_next_window,
 )
+from fantasy_football.status import WorkerStatus
 from fantasy_football.storage.writer import ParquetSnapshotWriter
 
 logger = logging.getLogger(__name__)
@@ -43,18 +45,63 @@ class RunOptions:
 class Poller:
     """Run a provider using an injected snapshot writer."""
 
-    def __init__(self, scraper: Scraper, writer: ParquetSnapshotWriter):
+    def __init__(
+        self,
+        scraper: Scraper,
+        writer: ParquetSnapshotWriter,
+        status: WorkerStatus | None = None,
+    ):
         self.scraper = scraper
         self.writer = writer
+        self.status = status
+        self.errors = 0
 
     @property
     def log_name(self) -> str:
         return self.scraper.log_name
 
     def scrape_once(self) -> int:
-        return self.writer.write(self.scraper.fetch_snapshot())
+        self._status(status="Scraping")
+        try:
+            rows = self.writer.write(self.scraper.fetch_snapshot())
+        except Exception:
+            self.errors += 1
+            self._status(
+                status="Retrying",
+                last_result="Failed",
+                last_scrape=time.time(),
+                errors=self.errors,
+            )
+            raise
+        now = time.time()
+        self._status(
+            status="Waiting", last_result="Success", last_scrape=now, last_success=now
+        )
+        return rows
+
+    def _status(self, **changes: object) -> None:
+        if self.status is not None:
+            self.status.update(**changes)
 
     def run(
+        self,
+        *,
+        interval_seconds: int = DEFAULT_INTERVAL_SECONDS,
+        retry_seconds: int = DEFAULT_RETRY_SECONDS,
+        once: bool = False,
+        schedule_gate: bool = True,
+        schedule_refresh_seconds: int = DEFAULT_SCHEDULE_REFRESH_SECONDS,
+    ) -> int | None:
+        with self.status if self.status is not None else nullcontext():
+            return self._run(
+                interval_seconds=interval_seconds,
+                retry_seconds=retry_seconds,
+                once=once,
+                schedule_gate=schedule_gate,
+                schedule_refresh_seconds=schedule_refresh_seconds,
+            )
+
+    def _run(
         self,
         *,
         interval_seconds: int = DEFAULT_INTERVAL_SECONDS,
@@ -136,6 +183,7 @@ class Poller:
                                 ),
                                 sleep_seconds,
                             )
+                    self._status(status="Idle")
                     time.sleep(max(1.0, sleep_seconds))
                     continue
                 started = time.monotonic()
@@ -148,6 +196,7 @@ class Poller:
                 )
                 time.sleep(interval_seconds)
             except Exception:
+                self._status(status="Retrying")
                 logger.exception(
                     "%s cycle failed; retrying in %ss",
                     self.log_name,
@@ -182,6 +231,7 @@ class Poller:
                     return rows
                 time.sleep(interval_seconds)
             except Exception:
+                self._status(status="Retrying")
                 logger.exception(
                     "%s cycle failed; retrying in %ss",
                     self.log_name,

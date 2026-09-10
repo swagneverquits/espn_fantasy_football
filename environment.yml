@@ -12,3 +12,4 @@ dependencies:
   - pyarrow
   - google-cloud-storage
   - duckdb
+  - rich>=13,<15

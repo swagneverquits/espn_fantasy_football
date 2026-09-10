@@ -136,6 +136,13 @@ def build_parser() -> argparse.ArgumentParser:
     sync.add_argument("--output-dir", type=Path, default=PARQUET_DIR)
     sync.add_argument("--tables", nargs="+", choices=PARQUET_TABLES)
 
+    status = commands.add_parser("status", help="Show remote scraper worker status.")
+    status.add_argument(
+        "--watch",
+        action="store_true",
+        help="Refresh the dashboard until Ctrl+C; scraping continues independently.",
+    )
+
     return parser
 
 
@@ -158,6 +165,7 @@ def _sync(args: argparse.Namespace) -> int:
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     from fantasy_football.storage.sync import sync_parquet_prefix
+    from fantasy_football.sync_display import SyncDisplay
 
     targets = (
         _all_leagues(args)
@@ -170,7 +178,10 @@ def _sync(args: argparse.Namespace) -> int:
     failed = False
     total = 0
     # Each league has a separate destination prefix and its own GCS client.
-    with ThreadPoolExecutor(max_workers=min(8, len(targets))) as pool:
+    with (
+        SyncDisplay(targets) as display,
+        ThreadPoolExecutor(max_workers=min(8, len(targets))) as pool,
+    ):
         futures = {
             pool.submit(
                 sync_parquet_prefix,
@@ -181,17 +192,28 @@ def _sync(args: argparse.Namespace) -> int:
                 matchup_period=args.week,
                 output_dir=args.output_dir,
                 tables=args.tables,
-            ): (provider, name)
+                **(
+                    {
+                        "progress": lambda status, count, latest, p=provider, i=league_id: display.update(
+                            p, i, status, count, latest
+                        )
+                    }
+                    if display.enabled
+                    else {}
+                ),
+            ): (provider, name, league_id)
             for provider, name, league_id in targets
         }
         for future in as_completed(futures):
-            provider, name = futures[future]
+            provider, name, league_id = futures[future]
             try:
                 count = future.result()
                 total += count
-                logging.info("Synced %s/%s: %d new objects", provider, name, count)
+                if not display.enabled:
+                    logging.info("Synced %s/%s: %d new objects", provider, name, count)
             except Exception:
                 failed = True
+                display.update(provider, league_id, "Failed", 0, None)
                 logging.exception("Sync failed: %s/%s", provider, name)
     logging.info(
         "Downloaded %d new Parquet objects across %d leagues", total, len(targets)
@@ -275,12 +297,21 @@ def main(argv: Sequence[str] | None = None) -> int:
             from fantasy_football.scrapers.sleeper.scraper import SleeperScraper
 
             scraper = SleeperScraper(args.league_id, season=args.season)
-        Poller(scraper, _configured_writer(args.storage)).run(
+        from fantasy_football.status import WorkerStatus
+
+        worker_status = WorkerStatus(
+            args.provider, str(league_id if args.provider == "espn" else args.league_id)
+        )
+        Poller(scraper, _configured_writer(args.storage), status=worker_status).run(
             interval_seconds=options.interval_seconds,
             retry_seconds=options.retry_seconds,
             once=options.once,
             schedule_gate=options.schedule_gate,
         )
+    elif args.command == "status":
+        from fantasy_football.status import show_status
+
+        return show_status(load_leagues(args.config), watch=args.watch)
     elif args.command == "sync":
         if not args.all and args.provider is None:
             parser.error("--provider is required with --league-id")

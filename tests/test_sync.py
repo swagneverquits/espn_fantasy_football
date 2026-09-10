@@ -31,8 +31,13 @@ class SyncRecoveryTests(unittest.TestCase):
             )
             destination = Path(directory) / blob.name
             blob.download_to_filename.side_effect = interrupted
+            progress = Mock()
+            kwargs["progress"] = progress
             with self.assertRaises(OSError):
                 sync_parquet_prefix("test", **kwargs)
+            self.assertNotIn(
+                "Synced", [call.args[0] for call in progress.call_args_list]
+            )
             self.assertFalse(destination.exists())
             self.assertEqual(list(Path(directory).rglob("*.part")), [])
             # A truncated file from an older sync must also be repaired.
@@ -45,3 +50,4 @@ class SyncRecoveryTests(unittest.TestCase):
             blob.download_to_filename.reset_mock()
             self.assertEqual(sync_parquet_prefix("test", **kwargs), 0)
             blob.download_to_filename.assert_not_called()
+            progress.assert_called_with("Synced", 0, 1)
