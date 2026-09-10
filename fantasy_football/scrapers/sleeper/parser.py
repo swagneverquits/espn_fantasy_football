@@ -1,6 +1,5 @@
 """Normalize Sleeper payloads into the common snapshot tables."""
 
-import logging
 import math
 import time
 
@@ -8,8 +7,6 @@ from fantasy_football.constants import MATCHUP_ID_COL
 from fantasy_football.snapshot import Snapshot
 
 from .win_probability import sleeper_win_percentage
-
-logger = logging.getLogger(__name__)
 
 
 def _projection_key(scoring_settings):
@@ -19,6 +16,15 @@ def _projection_key(scoring_settings):
     if settings.get("rec") == 0.5 and settings.get("rec_yd") == 0.1:
         return "pts_half_ppr"
     return "pts_std"
+
+
+def _projection_or_zero(value: object) -> float:
+    """Treat unavailable or non-finite provider projections as zero."""
+    try:
+        projected = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return 0.0
+    return projected if math.isfinite(projected) else 0.0
 
 
 def _projected_totals(data):
@@ -32,31 +38,18 @@ def _projected_totals(data):
     }
     totals = {}
     for matchup in data.get("matchups", []):
-        # Empty lineup slots aren't players; a real starter needs a finite estimate.
         starters = [
             str(player_id)
             for player_id in matchup.get("starters", [])
             if player_id is not None and str(player_id) not in {"", "0"}
         ]
-        values = []
-        missing = []
-        for player_id in starters:
-            try:
-                value = float(projection_map[player_id])
-                if not math.isfinite(value):
-                    raise ValueError("Non-finite projection")
-            except (KeyError, TypeError, ValueError, OverflowError):
-                missing.append(player_id)
-            else:
-                values.append(value)
-        roster_id = matchup["roster_id"]
-        totals[roster_id] = sum(values) if values and not missing else None
-        if missing:
-            logger.warning(
-                "Sleeper roster=%s projection incomplete: missing starters=%s",
-                roster_id,
-                ",".join(missing),
-            )
+        totals[matchup["roster_id"]] = sum(
+            (
+                _projection_or_zero(projection_map.get(player_id))
+                for player_id in starters
+            ),
+            0.0,
+        )
     return totals
 
 
@@ -150,7 +143,9 @@ def _player_data(
                 continue
             player_key = str(player_id)
             projection = projections.get(player_key, {})
-            projected = (projection.get("stats") or {}).get(scoring_key)
+            projected = _projection_or_zero(
+                (projection.get("stats") or {}).get(scoring_key)
+            )
             stat = stats.get(player_key, {})
             player = projection.get("player") or stat.get("player") or {}
             # Matchup points include league-specific scoring; stats are a fallback.

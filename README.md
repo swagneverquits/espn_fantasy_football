@@ -54,7 +54,7 @@ Each poll writes one `team_snapshots` object and one `player_snapshots` object p
 
 Sleeper checks the current NFL week every two hours and refreshes league/user metadata when the week changes. `scrape all --once` waits for every league to finish successfully; a failed worker stops the run with a nonzero exit code.
 
-Sleeper player IDs are stored as text, including defense abbreviations such as `PHI`. Starters without projections are retained with missing values. ESPN player points use actual stats for the current scoring period. If Sleeper's probability formula cannot accept the supplied scores/projections, the snapshot retains scores and stores a missing probability with a warning; it does not substitute a guessed percentage.
+Sleeper player IDs are stored as text, including defense abbreviations such as `PHI`. Unavailable Sleeper projections count as zero in both player snapshots and team totals. ESPN player points use actual stats for the current scoring period. If Sleeper's probability formula cannot accept the supplied scores/projections, the snapshot retains scores and stores a missing probability with a warning; it does not substitute a guessed percentage.
 
 Metadata hash state is written atomically and kept separately for local storage and each GCS bucket. Invalid state is rebuilt by writing metadata again. Upgrading from the older shared state files causes one fresh metadata write per league.
 
@@ -105,7 +105,7 @@ Plot panels follow collection windows inferred from timestamp gaps longer than 3
 
 The shared schedule cache uses OS-managed locks, released when the owner exits. The lock file can remain on disk without indicating ownership. Waiting workers only accept fresh cached schedules.
 
-Missing ESPN probabilities retain the team's score. Sleeper team projections require finite projections for every nonempty starter; incomplete totals and their probabilities remain missing. Matching the weekly projection inputs to Sleeper's live UI has not been verified: the historical stats endpoint returned HTTP 403 during the latest check. The current inputs must not be treated as confirmed live UI projections.
+Missing ESPN probabilities retain the team's score. Unavailable or non-finite Sleeper starter projections default to zero, allowing team totals and probabilities to be calculated from the remaining projections. Matching the weekly projection inputs to Sleeper's live UI has not been verified: the historical stats endpoint returned HTTP 403 during the latest check. The current inputs must not be treated as confirmed live UI projections.
 
 ## All-league local updates
 

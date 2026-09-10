@@ -117,7 +117,7 @@ class SleeperPlayerTests(unittest.TestCase):
             self.assertEqual(set(players["player_id"]), {"123", "456", "999", "PHI"})
             defense = players.set_index("player_id").loc["PHI"]
             self.assertEqual(defense["points_live"], 12)
-            self.assertTrue(pd.isna(defense["projected"]))
+            self.assertEqual(defense["projected"], 0.0)
 
     def test_probability_valid_and_invalid_domains(self):
         self.assertEqual(sleeper_win_percentage(20, 100, 20, 100), (50, 50))
@@ -129,7 +129,7 @@ class SleeperPlayerTests(unittest.TestCase):
 
 
 class ProjectionCompletenessTests(unittest.TestCase):
-    def test_missing_starter_never_becomes_partial_total(self):
+    def test_missing_starter_contributes_zero(self):
         from fantasy_football.scrapers.sleeper.parser import _projected_totals
 
         data = {
@@ -138,8 +138,53 @@ class ProjectionCompletenessTests(unittest.TestCase):
                 "projections": [{"player_id": "a", "stats": {"pts_std": 20}}]
             },
         }
-        self.assertIsNone(_projected_totals(data)[1])
+        self.assertEqual(_projected_totals(data)[1], 20.0)
         data["player_data"]["projections"].append(
             {"player_id": "b", "stats": {"pts_std": 0}}
         )
         self.assertEqual(_projected_totals(data)[1], 20)
+
+
+class ZeroProjectionTests(unittest.TestCase):
+    def test_unavailable_values_and_valid_negative_projection(self):
+        from fantasy_football.scrapers.sleeper.parser import _projection_or_zero
+
+        for value in (None, float("nan"), float("inf"), "invalid"):
+            self.assertEqual(_projection_or_zero(value), 0.0)
+        self.assertEqual(_projection_or_zero(-2), -2.0)
+
+    def test_missing_projection_allows_probability_calculation(self):
+        snapshot = parse_snapshot(
+            {
+                "week": 1,
+                "users": [],
+                "rosters": [],
+                "matchups": [
+                    {
+                        "roster_id": 1,
+                        "matchup_id": 1,
+                        "points": 0,
+                        "starters": ["a", "missing"],
+                    },
+                    {"roster_id": 2, "matchup_id": 1, "points": 0, "starters": ["b"]},
+                ],
+                "player_data": {
+                    "projections": [
+                        {"player_id": "a", "stats": {"pts_std": 20}},
+                        {"player_id": "b", "stats": {"pts_std": 20}},
+                    ]
+                },
+            },
+            league_id="123",
+            season=2026,
+        )
+        self.assertEqual(snapshot.team_snapshots["projected_live"].tolist(), [20, 20])
+        self.assertEqual(
+            snapshot.team_snapshots["win_probability"].tolist(), [0.5, 0.5]
+        )
+        self.assertEqual(
+            snapshot.player_snapshots.set_index("player_id").loc[
+                "missing", "projected"
+            ],
+            0.0,
+        )
