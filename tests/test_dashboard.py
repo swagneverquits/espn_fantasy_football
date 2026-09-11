@@ -34,7 +34,9 @@ class DashboardTests(unittest.TestCase):
         output = self.render()
         self.assertIn("Upcoming NFL windows", output)
         self.assertIn("Scraper status", output)
-        self.assertIn("NFL week", output)
+        self.assertIn("Week", output)
+        self.assertNotIn("NFL week", output)
+        self.assertNotIn("#", output)
 
     def test_active_and_unhealthy_workers_hide_windows(self):
         for state in ("Scraping", "Waiting", "Retrying", "Stopped", "Starting"):

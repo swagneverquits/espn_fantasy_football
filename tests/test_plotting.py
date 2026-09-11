@@ -74,3 +74,21 @@ class WindowTests(unittest.TestCase):
         self.assertEqual(
             len(_game_windows(pd.DataFrame({"timestamp": times}), 1800)), 2
         )
+
+
+class EdgeScaleTests(unittest.TestCase):
+    def test_symmetric_padded_zoom_and_labels(self):
+        from fantasy_football.plotting.plotting import _edge_scale
+
+        limit, ticks, labels = _edge_scale(pd.Series([0.4, 0.5, 0.6]))
+        self.assertEqual(limit, 15)
+        self.assertEqual(ticks, (-15, -7.5, 0, 7.5, 15))
+        self.assertEqual(labels, ("65%", "57.5%", "Even", "57.5%", "65%"))
+
+    def test_minimum_range_full_scale_and_missing_data(self):
+        from fantasy_football.plotting.plotting import _edge_scale
+
+        self.assertEqual(_edge_scale(pd.Series([0.5, 0.501]))[0], 10)
+        self.assertEqual(_edge_scale(pd.Series([0.5]), True)[0], 50)
+        self.assertEqual(_edge_scale(pd.Series([0, 1]))[0], 50)
+        self.assertEqual(_edge_scale(pd.Series([None, float("inf")]))[0], 50)

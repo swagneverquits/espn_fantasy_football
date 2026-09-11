@@ -106,6 +106,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     analyze.add_argument("--season", type=int, required=True)
     analyze.add_argument("--week", type=int, required=True)
+    analyze.add_argument(
+        "--full-edge-scale",
+        action="store_true",
+        help="Use the full 0-100%% Edge scale instead of symmetric auto-zoom.",
+    )
     selection = analyze.add_mutually_exclusive_group(required=True)
     selection.add_argument("--league", help="Configured league name.")
     selection.add_argument(
@@ -248,7 +253,12 @@ def _analyze(args: argparse.Namespace) -> int:
                 output = output / provider
             output = output / name / f"week_{args.week}"
             paths = generate_matchup_plots(
-                data, week=args.week, output_dir=output, league_name=name
+                data,
+                week=args.week,
+                season=args.season,
+                output_dir=output,
+                league_name=name,
+                full_edge_scale=args.full_edge_scale,
             )
             for path in paths:
                 print(path)

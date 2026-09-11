@@ -128,7 +128,7 @@ After deploying the updated image, open the live dashboard over SSH:
 sudo docker compose exec scraper python -m fantasy_football.cli status --watch
 ```
 
-One row per configured league shows worker state, last scrape result, completed-at time in ET, last successful save, worker uptime, and failed scrape count. Success means both fetch and persistence completed; partial uploads are failures. Uptime and error counts reset when a worker restarts. Idle is normal outside game windows. Heartbeats older than 20 seconds show stale/offline; the displayed uptime then remains at its last recorded value.
+One row per configured league shows worker state, last scrape result, completed-at time in ET, and failed scrape count. A single approximate uptime above the table uses the longest-running healthy worker. Success means both fetch and persistence completed; partial uploads are failures. Uptime and error counts reset when a worker restarts. Idle is normal outside game windows. Heartbeats older than 20 seconds show stale/offline and are excluded from the uptime summary. Last-success timestamps remain in the status files, but are not displayed as a column.
 
 Ctrl+C closes only the dashboard. Omit `--watch` for a single table. Status files are ephemeral local files inside the container, not uploaded to GCS. Existing Docker logs remain unchanged:
 
@@ -137,3 +137,5 @@ sudo docker compose logs -f --tail=100 scraper
 ```
 
 While every worker is healthy and idle, the dashboard shows upcoming NFL windows above the league table, including week, game count, and opening/closing times in ET. It hides that schedule during active polling. The dashboard only reads the shared schedule cache; it never makes schedule API calls.
+
+Edge plots auto-zoom symmetrically around Even using the entire matchup, sharing the scale across all game windows. Limits have 15% padding, round outward to 5 percentage points, and never zoom tighter than 40-60% or exceed 0-100%. Mirrored ticks retain actual probabilities. Use `analyze --full-edge-scale` for consistent full-range comparisons across matchups.

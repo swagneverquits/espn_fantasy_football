@@ -111,7 +111,7 @@ def status_table(leagues: LeagueConfig, root: Path = STATUS_DIR) -> Table:
 
     table = Table(
         title="Scraper status (ET)",
-        caption="Last scrape = completed attempt; Success = fetch + save completed. Uptime = worker runtime.",
+        caption="Last scrape = completed attempt; Success = fetch + save completed.",
     )
     for heading in (
         "League",
@@ -119,11 +119,10 @@ def status_table(leagues: LeagueConfig, root: Path = STATUS_DIR) -> Table:
         "Worker",
         "Last result",
         "Last scrape",
-        "Last success",
-        "Uptime",
         "Errors",
     ):
         table.add_column(heading)
+    live_uptimes = []
     for provider, configured in (("espn", leagues.espn), ("sleeper", leagues.sleeper)):
         for name, league_id in configured.items():
             data = read_status(root / f"{provider}_{league_id}.json")
@@ -135,21 +134,21 @@ def status_table(leagues: LeagueConfig, root: Path = STATUS_DIR) -> Table:
             ):
                 state = "Stale / offline"
             seconds = int(data.get("uptime", 0))
-            uptime = (
-                f"{seconds // 86400}d {seconds // 3600 % 24:02}:{seconds // 60 % 60:02}:{seconds % 60:02}"
-                if data
-                else "--"
-            )
+            if data and state not in ("Stopped", "Stale / offline"):
+                live_uptimes.append(seconds)
             table.add_row(
                 name,
                 provider,
                 state,
                 str(data.get("last_result", "--")),
                 _eastern(data.get("last_scrape")),
-                _eastern(data.get("last_success")),
-                uptime,
                 str(data.get("errors", 0)),
             )
+    # Workers start together; the longest healthy worker is an approximate run uptime.
+    if live_uptimes:
+        seconds = max(live_uptimes)
+        uptime = f"{seconds // 86400}d {seconds // 3600 % 24:02}:{seconds // 60 % 60:02}:{seconds % 60:02}"
+        table.title = f"Scraper status (ET) | Worker uptime: ~{uptime}"
     return table
 
 
@@ -213,12 +212,11 @@ def dashboard(leagues: LeagueConfig, root: Path = STATUS_DIR) -> Group:
         title="Upcoming NFL windows (ET)",
         caption=f"Cached schedule updated: {_eastern(updated)} ET",
     )
-    for heading in ("#", "NFL week", "Games", "Opens (ET)", "Closes (ET)"):
+    for heading in ("Week", "Games", "Opens (ET)", "Closes (ET)"):
         table.add_column(heading)
     eastern = ZoneInfo("America/New_York")
-    for index, window in enumerate(upcoming, 1):
+    for window in upcoming:
         table.add_row(
-            str(index),
             ", ".join(map(str, window.nfl_weeks)) or "--",
             str(window.game_count),
             window.start.astimezone(eastern).strftime("%a %m/%d %I:%M %p"),
