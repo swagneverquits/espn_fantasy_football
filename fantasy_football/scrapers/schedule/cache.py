@@ -39,6 +39,11 @@ def _read_cache() -> tuple[list[NFLGame], float] | None:
         return None
 
 
+def read_cached_schedule() -> tuple[list[NFLGame], float] | None:
+    """Read the last schedule for monitoring, without fetching or acquiring a lock."""
+    return _read_cache()
+
+
 def _fresh_games(refresh_seconds: int) -> list[NFLGame] | None:
     cached = _read_cache()
     if cached is not None and 0 <= time.time() - cached[1] < refresh_seconds:

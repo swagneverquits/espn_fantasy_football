@@ -6,11 +6,12 @@ import json
 import logging
 import tempfile
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from rich.console import Group
     from rich.table import Table
 
 from threading import Event, Lock, Thread
@@ -162,13 +163,77 @@ def _eastern(timestamp: float | None) -> str:
     )
 
 
+def dashboard(leagues: LeagueConfig, root: Path = STATUS_DIR) -> Group:
+    """Show cached windows only while every configured worker is healthy and idle."""
+    from rich.console import Group
+    from rich.table import Table
+    from rich.text import Text
+
+    from fantasy_football.scrapers.schedule.cache import read_cached_schedule
+    from fantasy_football.scrapers.schedule.windows import (
+        active_window,
+        build_game_windows,
+    )
+
+    workers = [
+        read_status(root / f"{provider}_{league_id}.json")
+        for provider, configured in (
+            ("espn", leagues.espn),
+            ("sleeper", leagues.sleeper),
+        )
+        for league_id in configured.values()
+    ]
+    now = datetime.fromtimestamp(time.time(), timezone.utc)
+    league_table = status_table(leagues, root)
+    if not workers or not all(
+        worker.get("status") == "Idle"
+        and 0
+        <= now.timestamp() - (worker.get("heartbeat") or 0)
+        <= STATUS_STALE_SECONDS
+        for worker in workers
+    ):
+        return Group(league_table)
+    cached = read_cached_schedule()
+    if cached is None:
+        return Group(
+            Text("Idle - schedule cache unavailable", style="dim"), league_table
+        )
+    games, updated = cached
+    windows = build_game_windows(games)
+    # Hide the schedule as soon as a window opens, even before workers wake up.
+    if active_window(windows, now) is not None:
+        return Group(league_table)
+    upcoming = [window for window in windows if window.start > now]
+    if not upcoming:
+        return Group(
+            Text("Idle ? no upcoming windows in cached schedule", style="dim"),
+            league_table,
+        )
+    table = Table(
+        title="Upcoming NFL windows (ET)",
+        caption=f"Cached schedule updated: {_eastern(updated)} ET",
+    )
+    for heading in ("#", "NFL week", "Games", "Opens (ET)", "Closes (ET)"):
+        table.add_column(heading)
+    eastern = ZoneInfo("America/New_York")
+    for index, window in enumerate(upcoming, 1):
+        table.add_row(
+            str(index),
+            ", ".join(map(str, window.nfl_weeks)) or "--",
+            str(window.game_count),
+            window.start.astimezone(eastern).strftime("%a %m/%d %I:%M %p"),
+            window.end.astimezone(eastern).strftime("%a %m/%d %I:%M %p"),
+        )
+    return Group(table, Text(""), league_table)
+
+
 def show_status(leagues: LeagueConfig, watch: bool = False) -> int:
     from rich.console import Console
     from rich.live import Live
 
     console = Console()
     if not watch:
-        console.print(status_table(leagues))
+        console.print(dashboard(leagues))
         return 0
     if not console.is_terminal:
         console.print(
@@ -176,9 +241,9 @@ def show_status(leagues: LeagueConfig, watch: bool = False) -> int:
         )
         return 1
     try:
-        with Live(status_table(leagues), console=console, refresh_per_second=1) as live:
+        with Live(dashboard(leagues), console=console, refresh_per_second=1) as live:
             while True:
                 time.sleep(1)
-                live.update(status_table(leagues))
+                live.update(dashboard(leagues))
     except KeyboardInterrupt:
         return 0

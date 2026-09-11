@@ -135,3 +135,5 @@ Ctrl+C closes only the dashboard. Omit `--watch` for a single table. Status file
 ```bash
 sudo docker compose logs -f --tail=100 scraper
 ```
+
+While every worker is healthy and idle, the dashboard shows upcoming NFL windows above the league table, including week, game count, and opening/closing times in ET. It hides that schedule during active polling. The dashboard only reads the shared schedule cache; it never makes schedule API calls.
