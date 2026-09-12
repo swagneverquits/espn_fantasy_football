@@ -2,7 +2,8 @@ import unittest
 from unittest.mock import Mock, patch
 
 from fantasy_football.config import LeagueConfig
-from fantasy_football.runner import Poller, RunOptions, run_all
+from fantasy_football.runtime.polling import Poller
+from fantasy_football.runtime.workers import RunOptions, run_all
 
 
 class WorkerTests(unittest.TestCase):
@@ -12,9 +13,10 @@ class WorkerTests(unittest.TestCase):
         second.poll.side_effect = [None, 0]
         with (
             patch(
-                "fantasy_football.runner.subprocess.Popen", side_effect=[first, second]
+                "fantasy_football.runtime.workers.subprocess.Popen",
+                side_effect=[first, second],
             ) as spawn,
-            patch("fantasy_football.runner.time.sleep"),
+            patch("fantasy_football.runtime.workers.time.sleep"),
         ):
             result = run_all(
                 LeagueConfig({"a": "1"}, {"b": "2"}), RunOptions(once=True)
@@ -31,7 +33,7 @@ class WorkerTests(unittest.TestCase):
                 first.poll.return_value = 2
                 second.poll.return_value = None
                 with patch(
-                    "fantasy_football.runner.subprocess.Popen",
+                    "fantasy_football.runtime.workers.subprocess.Popen",
                     side_effect=[first, second],
                 ):
                     result = run_all(
@@ -43,7 +45,7 @@ class WorkerTests(unittest.TestCase):
     def test_poller_once_bypasses_schedule_and_persists_snapshot(self):
         scraper, writer = Mock(), Mock()
         writer.write.return_value = 2
-        with patch("fantasy_football.runner.get_game_starts") as schedule:
+        with patch("fantasy_football.runtime.polling.get_game_starts") as schedule:
             self.assertEqual(Poller(scraper, writer).run(once=True), 2)
         schedule.assert_not_called()
         writer.write.assert_called_once_with(scraper.fetch_snapshot.return_value)

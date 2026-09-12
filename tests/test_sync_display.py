@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import Mock
 
-from fantasy_football.sync_display import SyncDisplay
+from fantasy_football.terminal.sync import SyncDisplay
 
 
 class SyncDisplayTests(unittest.TestCase):

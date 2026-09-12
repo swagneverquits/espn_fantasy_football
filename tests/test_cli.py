@@ -67,8 +67,8 @@ class ConfigTests(unittest.TestCase):
             with (
                 patch("fantasy_football.scrapers.espn.scraper.ESPNScraper") as scraper,
                 patch("fantasy_football.cli._configured_writer") as writer,
-                patch("fantasy_football.runner.Poller") as poller,
-                patch("fantasy_football.status.WorkerStatus") as status,
+                patch("fantasy_football.runtime.polling.Poller") as poller,
+                patch("fantasy_football.runtime.status.WorkerStatus") as status,
             ):
                 result = main(
                     [

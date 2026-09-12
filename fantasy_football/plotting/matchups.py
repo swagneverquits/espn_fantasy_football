@@ -7,19 +7,7 @@ import pandas as pd
 from fantasy_football.constants import MATCHUP_ID_COL, TEAM_ID_COL, TIMESTAMP_COL
 from fantasy_football.plotting.constants import LEAGUE_NAME_COL, TEAM_COL
 
-
-def _game_windows(
-    data: pd.DataFrame, gap_seconds: int
-) -> list[tuple[pd.Timestamp, pd.Timestamp]]:
-    """Infer independent collection windows from gaps in the timestamps."""
-    if gap_seconds <= 0:
-        raise ValueError("window_gap_seconds must be positive")
-    times = data[TIMESTAMP_COL].drop_duplicates().sort_values()
-    groups = times.diff().dt.total_seconds().gt(gap_seconds).cumsum()
-    grouped = list(times.groupby(groups))
-    if len(grouped) > 1 and len(grouped[-1][1]) == 1 and len(grouped[-2][1]) > 1:
-        grouped.pop()
-    return [(group.iloc[0], group.iloc[-1]) for _, group in grouped]
+from .renderer import plot_matchup
 
 
 def normalize_team_names(data: pd.DataFrame) -> pd.DataFrame:
@@ -43,8 +31,6 @@ def generate_matchup_plots(
     if data.empty:
         return []
 
-    from .portrait import plot_matchup_portrait
-
     data = normalize_team_names(data)
     if data[LEAGUE_NAME_COL].notna().any():
         league_name = data[LEAGUE_NAME_COL].dropna().iloc[-1]
@@ -54,7 +40,7 @@ def generate_matchup_plots(
         data.groupby(MATCHUP_ID_COL, sort=True), start=1
     ):
         paths.append(
-            plot_matchup_portrait(
+            plot_matchup(
                 matchup,
                 league_name=league_name,
                 week=week,

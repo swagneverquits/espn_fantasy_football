@@ -9,9 +9,11 @@ fantasy_football/
   constants.py          Shared paths, API endpoints, column names, and defaults
   config.py             Explicit TOML league configuration loading
   storage/              Raw Parquet objects, snapshot pipeline, and DuckDB queries
-  scrapers/             Shared lifecycle plus ESPN, Sleeper, and schedule implementations
+  scrapers/             Shared provider interface plus ESPN and Sleeper implementations
+  schedule/             NFL schedule acquisition, caching, and game windows
   snapshot.py           Shared five-table DataFrame contract
-  runner.py             Polling, scheduling, retries, and worker supervision
+  runtime/              Polling, retries, worker supervision, and heartbeats
+  terminal/             Live scraper dashboard and sync progress display
   plotting/             Render matchup figures from loaded DataFrames
 config/
   leagues.toml.example  Checked-in configuration template
@@ -97,7 +99,16 @@ Each provider implements `Scraper.fetch_snapshot() -> Snapshot`. Its parser prod
 
 DuckDB returns the stored snake_case columns plus team/league names. Plotting accepts those DataFrames directly and converts Unix timestamps to Eastern Time for display. Configuration and database queries are handled by the CLI, outside rendering.
 
-Tests are grouped by provider, runner, CLI/configuration, storage writer, sync, schedule, and plotting.
+Package organization:
+
+- `runtime/`: polling/retries, worker supervision, and heartbeat persistence.
+- `terminal/`: the scraper dashboard and local sync display.
+- `schedule/`: NFL schedule acquisition, shared caching, and game windows.
+- `scrapers/`: provider acquisition and normalization.
+- `storage/`: snapshot persistence, incremental sync, and DuckDB queries.
+- `plotting/`: matchup preparation (`matchups.py`), shared timeline geometry (`timeline.py`), and PNG rendering (`renderer.py`).
+
+The root retains the CLI, configuration, shared constants, and snapshot schema. CLI commands and persisted data formats are unchanged. Tests cover each responsibility independently.
 
 Storage modules are organized by responsibility: `writer.py` saves snapshots and metadata state, `parquet.py` serializes and publishes objects and defines their shared partition paths, `sync.py` downloads them, and `duckdb.py` queries them. The CLI resolves storage environment settings. Local writes stage files on the destination filesystem before publishing them atomically.
 

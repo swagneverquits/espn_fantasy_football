@@ -8,7 +8,7 @@ import pandas as pd
 from PIL import Image
 
 from fantasy_football.plotting import generate_matchup_plots
-from fantasy_football.plotting.portrait import plot_matchup_portrait
+from fantasy_football.plotting.renderer import plot_matchup
 
 
 class PortraitTests(unittest.TestCase):
@@ -35,7 +35,7 @@ class PortraitTests(unittest.TestCase):
     def test_portrait_dimensions_shared_continuous_time_and_scale(self):
         with tempfile.TemporaryDirectory() as directory:
             with patch("matplotlib.pyplot.close"):
-                path = plot_matchup_portrait(
+                path = plot_matchup(
                     self.data(),
                     league_name="Test",
                     week=1,

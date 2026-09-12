@@ -1,7 +1,7 @@
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from fantasy_football.scrapers.schedule.windows import (
+from fantasy_football.schedule.windows import (
     active_window,
     build_game_windows,
     seconds_until_next_window,
@@ -49,7 +49,7 @@ class CacheTests(unittest.TestCase):
         from pathlib import Path
         from unittest.mock import patch
 
-        from fantasy_football.scrapers.schedule import cache
+        from fantasy_football.schedule import cache
 
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "schedule.json"
@@ -81,7 +81,7 @@ class CacheTests(unittest.TestCase):
         from contextlib import contextmanager
         from unittest.mock import patch
 
-        from fantasy_football.scrapers.schedule import cache
+        from fantasy_football.schedule import cache
 
         @contextmanager
         def held():

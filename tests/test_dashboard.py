@@ -7,8 +7,8 @@ from unittest.mock import patch
 from rich.console import Console
 
 from fantasy_football.config import LeagueConfig
-from fantasy_football.scrapers.schedule.scraper import NFLGame
-from fantasy_football.status import dashboard
+from fantasy_football.schedule.scraper import NFLGame
+from fantasy_football.terminal.dashboard import dashboard
 
 
 class DashboardTests(unittest.TestCase):
@@ -18,11 +18,11 @@ class DashboardTests(unittest.TestCase):
         cached = ([NFLGame(now + timedelta(hours=kickoff_hours), 1)], time.time())
         with (
             patch(
-                "fantasy_football.status.read_status",
+                "fantasy_football.terminal.dashboard.read_status",
                 return_value={"status": state, "heartbeat": time.time() - age},
             ),
             patch(
-                "fantasy_football.scrapers.schedule.cache.read_cached_schedule",
+                "fantasy_football.schedule.cache.read_cached_schedule",
                 return_value=None if missing_cache else cached,
             ),
         ):

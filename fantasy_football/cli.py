@@ -165,7 +165,7 @@ def _sync(args: argparse.Namespace) -> int:
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     from fantasy_football.storage.sync import sync_parquet_prefix
-    from fantasy_football.sync_display import SyncDisplay
+    from fantasy_football.terminal.sync import SyncDisplay
 
     targets = (
         _all_leagues(args)
@@ -278,7 +278,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     if args.command == "scrape":
-        from fantasy_football.runner import Poller, RunOptions, run_all
+        from fantasy_football.runtime.polling import Poller
+        from fantasy_football.runtime.workers import RunOptions, run_all
 
         options = RunOptions(
             args.season,
@@ -301,7 +302,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             from fantasy_football.scrapers.sleeper.scraper import SleeperScraper
 
             scraper = SleeperScraper(args.league_id, season=args.season)
-        from fantasy_football.status import WorkerStatus
+        from fantasy_football.runtime.status import WorkerStatus
 
         worker_status = WorkerStatus(
             args.provider, str(league_id if args.provider == "espn" else args.league_id)
@@ -313,7 +314,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             schedule_gate=options.schedule_gate,
         )
     elif args.command == "status":
-        from fantasy_football.status import show_status
+        from fantasy_football.terminal.dashboard import show_status
 
         return show_status(load_leagues(args.config), watch=args.watch)
     elif args.command == "sync":

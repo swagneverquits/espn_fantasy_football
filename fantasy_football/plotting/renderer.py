@@ -1,4 +1,4 @@
-"""Experimental phone-oriented PNGs with chronological time running downward."""
+"""Phone-oriented PNGs with chronological time running downward."""
 
 import math
 from pathlib import Path
@@ -7,7 +7,6 @@ import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from matplotlib.patches import FancyBboxPatch
 from matplotlib.lines import Line2D
 from matplotlib.offsetbox import (
     AnchoredOffsetbox,
@@ -16,6 +15,7 @@ from matplotlib.offsetbox import (
     TextArea,
     VPacker,
 )
+from matplotlib.patches import FancyBboxPatch
 from matplotlib.text import Text
 from matplotlib.ticker import FixedLocator, NullFormatter
 
@@ -35,7 +35,7 @@ from .constants import (
     TEAM_FONT,
     WIN_CHANCE_COL,
 )
-from .plotting import _game_windows
+from .timeline import compressed_timeline, game_windows
 
 
 def _asymmetric_probability_scale(
@@ -146,30 +146,7 @@ def _team_record(frame: pd.DataFrame) -> str:
     return f" ({wins}-{losses}-{ties})" if ties else f" ({wins}-{losses})"
 
 
-def _compressed_timeline(windows):
-    """Map active windows to a compact shared vertical coordinate."""
-    raw = [(mdates.date2num(start), mdates.date2num(end)) for start, end in windows]
-    durations = [end - start for start, end in raw]
-    current_gap = max(max(durations, default=1 / 24) * 0.12, 0.15 / 24)
-    gap = current_gap * 0.25
-    segments = []
-    cursor = 0.0
-    for (start, end), duration in zip(raw, durations):
-        segments.append((start, end, cursor, cursor + duration))
-        cursor += duration + gap
-
-    def transform(values):
-        values = np.asarray(values, dtype=float)
-        result = np.empty_like(values)
-        for raw_start, raw_end, mapped_start, _ in segments:
-            selected = (values >= raw_start) & (values <= raw_end)
-            result[selected] = mapped_start + values[selected] - raw_start
-        return result
-
-    return segments, transform, cursor - gap
-
-
-def plot_matchup_portrait(
+def plot_matchup(
     matchup_df: pd.DataFrame,
     *,
     league_name: str,
@@ -194,7 +171,7 @@ def plot_matchup_portrait(
         if len(seasons) > 1:
             raise ValueError("A matchup plot must contain only one season")
         season = int(seasons[0]) if len(seasons) else DEFAULT_SEASON
-    windows = _game_windows(data, window_gap_seconds)
+    windows = game_windows(data, window_gap_seconds)
     active = pd.Series(False, index=data.index)
     for window_start, window_end in windows:
         active |= data[TIMESTAMP_COL].between(window_start, window_end)
@@ -204,7 +181,7 @@ def plot_matchup_portrait(
         frames[0][WIN_CHANCE_COL]
     )
     start, end = data[TIMESTAMP_COL].min(), data[TIMESTAMP_COL].max()
-    timeline, map_time, timeline_end = _compressed_timeline(windows)
+    timeline, map_time, timeline_end = compressed_timeline(windows)
     lower, upper = 0.0, timeline_end
     durations = [
         mdates.date2num(end) - mdates.date2num(start) for start, end in windows

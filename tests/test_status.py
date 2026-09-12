@@ -7,8 +7,9 @@ from unittest.mock import Mock, patch
 from rich.console import Console
 
 from fantasy_football.config import LeagueConfig
-from fantasy_football.runner import Poller
-from fantasy_football.status import WorkerStatus, read_status, status_table
+from fantasy_football.runtime.polling import Poller
+from fantasy_football.runtime.status import WorkerStatus, read_status
+from fantasy_football.terminal.dashboard import status_table
 
 
 class StatusTests(unittest.TestCase):
@@ -38,7 +39,9 @@ class StatusTests(unittest.TestCase):
             root = Path(directory)
             status = WorkerStatus("espn", "1", root)
             status.update(status="Idle")
-            with patch("fantasy_football.status.time.time", return_value=1e12):
+            with patch(
+                "fantasy_football.terminal.dashboard.time.time", return_value=1e12
+            ):
                 output = io.StringIO()
                 Console(file=output, width=160).print(
                     status_table(LeagueConfig({"one": "1"}, {"two": "2"}), root)
@@ -52,7 +55,7 @@ class StatusTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             status = WorkerStatus("espn", "1", Path(directory))
             with patch(
-                "fantasy_football.status.tempfile.NamedTemporaryFile",
+                "fantasy_football.runtime.status.tempfile.NamedTemporaryFile",
                 side_effect=OSError("disk full"),
             ):
                 status.update(status="Scraping")
@@ -62,7 +65,9 @@ class StatusTests(unittest.TestCase):
 
         with (
             patch("fantasy_football.cli.load_leagues") as config,
-            patch("fantasy_football.status.show_status", return_value=0) as show,
+            patch(
+                "fantasy_football.terminal.dashboard.show_status", return_value=0
+            ) as show,
         ):
             self.assertEqual(main(["status", "--watch"]), 0)
             show.assert_called_once_with(config.return_value, watch=True)
