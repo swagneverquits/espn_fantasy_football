@@ -41,8 +41,3 @@ SCORE_COL = "score_live"
 PROJECTED_COL = "projected_live"
 WIN_CHANCE_COL = "win_probability"
 LEAGUE_NAME_COL = "league_name"
-# Edge-axis scale
-EDGE_LIMIT = 50
-EDGE_MIN_LIMIT = 10
-EDGE_PADDING = 1.15
-EDGE_LIMIT_STEP = 5

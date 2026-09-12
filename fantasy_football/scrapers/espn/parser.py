@@ -53,6 +53,11 @@ def parse_snapshot(
             "team_id": team.get("id"),
             "team_name": team.get("name"),
             "logo_url": team.get("logo"),
+            "wins": ((team.get("record") or {}).get("overall") or {}).get("wins"),
+            "losses": ((team.get("record") or {}).get("overall") or {}).get(
+                "losses"
+            ),
+            "ties": ((team.get("record") or {}).get("overall") or {}).get("ties"),
         }
         for team in data.get("teams", [])
     ]

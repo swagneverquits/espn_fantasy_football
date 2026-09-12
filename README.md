@@ -138,4 +138,4 @@ sudo docker compose logs -f --tail=100 scraper
 
 While every worker is healthy and idle, the dashboard shows upcoming NFL windows above the league table, including week, game count, and opening/closing times in ET. It hides that schedule during active polling. The dashboard only reads the shared schedule cache; it never makes schedule API calls.
 
-Edge plots auto-zoom symmetrically around Even using the entire matchup, sharing the scale across all game windows. Limits have 15% padding, round outward to 5 percentage points, and never zoom tighter than 40-60% or exceed 0-100%. Mirrored ticks retain actual probabilities. Use `analyze --full-edge-scale` for consistent full-range comparisons across matchups.
+Matchup plots are rendered as phone-oriented portrait PNGs. The Win probability panel uses a linear tug-of-war scale around Even, with independent space for each team's observed advantage; Points and Win probability share the same compressed activity-window timeline.

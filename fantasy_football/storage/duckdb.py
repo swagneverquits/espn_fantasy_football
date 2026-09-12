@@ -38,16 +38,21 @@ def load_matchup_results(
     league_glob = _parquet_glob(prefix, "league_metadata")
     team_join = ""
     team_name = "CAST(s.team_id AS VARCHAR)"
+    team_record = "NULL::INTEGER AS wins, NULL::INTEGER AS losses, NULL::INTEGER AS ties"
     if list(team_glob.parent.glob(team_glob.name)):
         team_join = f"""
         LEFT JOIN (
             SELECT {TEAM_ID_COL},
-                   arg_max(team_name, {TIMESTAMP_COL}) AS team_name
+                   arg_max(team_name, {TIMESTAMP_COL}) AS team_name,
+                   arg_max(wins, {TIMESTAMP_COL}) AS wins,
+                   arg_max(losses, {TIMESTAMP_COL}) AS losses,
+                   arg_max(ties, {TIMESTAMP_COL}) AS ties
             FROM read_parquet({_sql_path(team_glob)}, union_by_name=true)
             GROUP BY {TEAM_ID_COL}
         ) AS t USING ({TEAM_ID_COL})
         """
         team_name = "COALESCE(t.team_name, CAST(s.team_id AS VARCHAR))"
+        team_record = "t.wins, t.losses, t.ties"
 
     league_name = "NULL::VARCHAR"
     if list(league_glob.parent.glob(league_glob.name)):
@@ -60,6 +65,7 @@ def load_matchup_results(
         SELECT
             s.*,
             {team_name} AS team_name,
+            {team_record},
             {league_name} AS league_name
         FROM read_parquet({_sql_path(snapshot_glob)}, union_by_name=true) AS s
         {team_join}

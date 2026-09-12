@@ -55,6 +55,28 @@ class PlottingTests(unittest.TestCase):
 
 
 class WindowTests(unittest.TestCase):
+    def test_repeated_isolated_terminal_snapshot_does_not_create_window(self):
+        times = pd.to_datetime(
+            [
+                "2026-09-10 23:50",
+                "2026-09-11 00:10",
+                "2026-09-11 23:16",
+            ]
+        ).tz_localize("America/New_York")
+        data = pd.DataFrame(
+            [
+                [times[0], 1, 10.0],
+                [times[0], 2, 12.0],
+                [times[1], 1, 10.0],
+                [times[1], 2, 12.0],
+                [times[2], 1, 10.0],
+                [times[2], 2, 12.0],
+            ],
+            columns=["timestamp", "team_id", "score_live"],
+        )
+        windows = _game_windows(data, 1800)
+        self.assertEqual(windows, [(times[0], times[1])])
+
     def test_midnight_is_continuous_but_evening_is_separate(self):
         times = pd.to_datetime(
             [
@@ -74,21 +96,3 @@ class WindowTests(unittest.TestCase):
         self.assertEqual(
             len(_game_windows(pd.DataFrame({"timestamp": times}), 1800)), 2
         )
-
-
-class EdgeScaleTests(unittest.TestCase):
-    def test_symmetric_padded_zoom_and_labels(self):
-        from fantasy_football.plotting.plotting import _edge_scale
-
-        limit, ticks, labels = _edge_scale(pd.Series([0.4, 0.5, 0.6]))
-        self.assertEqual(limit, 15)
-        self.assertEqual(ticks, (-15, -7.5, 0, 7.5, 15))
-        self.assertEqual(labels, ("65%", "57.5%", "Even", "57.5%", "65%"))
-
-    def test_minimum_range_full_scale_and_missing_data(self):
-        from fantasy_football.plotting.plotting import _edge_scale
-
-        self.assertEqual(_edge_scale(pd.Series([0.5, 0.501]))[0], 10)
-        self.assertEqual(_edge_scale(pd.Series([0.5]), True)[0], 50)
-        self.assertEqual(_edge_scale(pd.Series([0, 1]))[0], 50)
-        self.assertEqual(_edge_scale(pd.Series([None, float("inf")]))[0], 50)

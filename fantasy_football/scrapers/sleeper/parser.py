@@ -63,6 +63,7 @@ def parse_snapshot(
     for roster in data.get("rosters", []):
         user = users.get(str(roster.get("owner_id")), {})
         details = user.get("metadata") or {}
+        settings = roster.get("settings") or {}
         metadata.append(
             {
                 "team_id": roster["roster_id"],
@@ -70,6 +71,9 @@ def parse_snapshot(
                 or user.get("display_name")
                 or str(roster["roster_id"]),
                 "logo_url": details.get("avatar") or user.get("avatar"),
+                "wins": settings.get("wins"),
+                "losses": settings.get("losses"),
+                "ties": settings.get("ties"),
             }
         )
     projected = _projected_totals(data)

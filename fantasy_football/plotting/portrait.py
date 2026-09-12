@@ -1,6 +1,5 @@
 """Experimental phone-oriented PNGs with chronological time running downward."""
 
-import logging
 import math
 from pathlib import Path
 
@@ -9,6 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.patches import FancyBboxPatch
+from matplotlib.lines import Line2D
 from matplotlib.offsetbox import (
     AnchoredOffsetbox,
     AnnotationBbox,
@@ -36,8 +36,6 @@ from .constants import (
     WIN_CHANCE_COL,
 )
 from .plotting import _game_windows
-
-logger = logging.getLogger(__name__)
 
 
 def _asymmetric_probability_scale(
@@ -106,6 +104,48 @@ def _crop_unused_bottom(fig, *, dpi: int, padding_pixels: int = 40) -> None:
     fig.set_size_inches(fig.get_figwidth(), new_height)
 
 
+def _plot_colored_probability_path(ax, edge, time_values) -> None:
+    """Draw the probability path in team color, splitting crossings at Even."""
+    edge = np.asarray(edge, dtype=float)
+    time_values = np.asarray(time_values, dtype=float)
+    for x0, x1, y0, y1 in zip(edge[:-1], edge[1:], time_values[:-1], time_values[1:]):
+        if x0 * x1 < 0:
+            crossing_y = y0 + (y1 - y0) * (-x0 / (x1 - x0))
+            ax.plot(
+                [x0, 0],
+                [y0, crossing_y],
+                color=TEAM_COLORS[0] if x0 < 0 else TEAM_COLORS[1],
+                lw=1.8,
+                zorder=2.5,
+            )
+            ax.plot(
+                [0, x1],
+                [crossing_y, y1],
+                color=TEAM_COLORS[0] if x1 < 0 else TEAM_COLORS[1],
+                lw=1.8,
+                zorder=2.5,
+            )
+            continue
+        color = TEAM_COLORS[0] if (x0 < 0 or x1 < 0) else TEAM_COLORS[1]
+        if x0 == 0 and x1 == 0:
+            color = "#666666"
+        elif x0 == 0 or x1 == 0:
+            color = TEAM_COLORS[0] if (x0 + x1) < 0 else TEAM_COLORS[1]
+        ax.plot([x0, x1], [y0, y1], color=color, lw=1.8, zorder=2.5)
+
+
+def _team_record(frame: pd.DataFrame) -> str:
+    """Format an optional season record from the joined team metadata."""
+    required = ("wins", "losses", "ties")
+    if not all(column in frame for column in required):
+        return ""
+    row = frame[list(required)].dropna().iloc[-1:] if not frame.empty else frame
+    if row.empty:
+        return ""
+    wins, losses, ties = (int(float(value)) for value in row.iloc[0])
+    return f" ({wins}-{losses}-{ties})" if ties else f" ({wins}-{losses})"
+
+
 def _compressed_timeline(windows):
     """Map active windows to a compact shared vertical coordinate."""
     raw = [(mdates.date2num(start), mdates.date2num(end)) for start, end in windows]
@@ -137,10 +177,9 @@ def plot_matchup_portrait(
     matchup: int | str,
     savepath: str | Path,
     window_gap_seconds: int = 1800,
-    full_edge_scale: bool = False,
     season: int | None = None,
 ) -> Path:
-    """Render an alternate 1080x1350 PNG without altering the landscape renderer."""
+    """Render a phone-oriented 1080x1350 matchup PNG."""
     data = matchup_df.copy()
     times = data[TIMESTAMP_COL]
     data[TIMESTAMP_COL] = pd.to_datetime(
@@ -155,8 +194,12 @@ def plot_matchup_portrait(
         if len(seasons) > 1:
             raise ValueError("A matchup plot must contain only one season")
         season = int(seasons[0]) if len(seasons) else DEFAULT_SEASON
-    frames = [data[data[TEAM_ID_COL].eq(team)] for team in ids]
     windows = _game_windows(data, window_gap_seconds)
+    active = pd.Series(False, index=data.index)
+    for window_start, window_end in windows:
+        active |= data[TIMESTAMP_COL].between(window_start, window_end)
+    data = data.loc[active].copy()
+    frames = [data[data[TEAM_ID_COL].eq(team)] for team in ids]
     left_extent, right_extent, ticks, labels = _asymmetric_probability_scale(
         frames[0][WIN_CHANCE_COL]
     )
@@ -193,7 +236,9 @@ def plot_matchup_portrait(
             va="top",
             ha="center",
         )
-        team_a, team_b = [str(frame[TEAM_COL].iloc[-1]) for frame in frames]
+        team_a, team_b = [
+            f"{frame[TEAM_COL].iloc[-1]}{_team_record(frame)}" for frame in frames
+        ]
         matchup_line = HPacker(
             children=[
                 TextArea(
@@ -231,10 +276,10 @@ def plot_matchup_portrait(
             pad=0,
             borderpad=0,
             frameon=False,
-            bbox_to_anchor=(0.5, 0.925),
+            bbox_to_anchor=(0.5, 0.935),
             bbox_transform=fig.transFigure,
         )
-        matchup_artist._portrait_anchor_y = 0.925
+        matchup_artist._portrait_anchor_y = 0.935
         fig.add_artist(matchup_artist)
         axes = fig.subplots(1, 2, sharey=True, gridspec_kw={"width_ratios": [1.1, 1]})
         fig.subplots_adjust(left=0.13, right=0.94, bottom=0.13, top=0.86, wspace=0.22)
@@ -250,22 +295,35 @@ def plot_matchup_portrait(
                 probability_position.height,
             ]
         )
+        visualization_left = probability_ax.get_position().x0
+        visualization_right = points_ax.get_position().x1
+        fig.add_artist(
+            Line2D(
+                [visualization_left, visualization_right],
+                [0.905, 0.905],
+                transform=fig.transFigure,
+                color="#C4C4C4",
+                linewidth=1.0,
+                solid_capstyle="butt",
+                zorder=2,
+            )
+        )
         fig.text(
             probability_ax.get_position().x0 + probability_ax.get_position().width / 2,
-            0.89,
-            "Win probability",
-            fontsize=12,
+            0.885,
+            "Win Probability",
+            fontsize=13,
             fontweight="medium",
-            color="#444444",
+            color="#4A4A4A",
             ha="center",
         )
         fig.text(
             points_ax.get_position().x0 + points_ax.get_position().width / 2,
-            0.89,
+            0.885,
             "Points",
-            fontsize=12,
+            fontsize=13,
             fontweight="medium",
-            color="#444444",
+            color="#4A4A4A",
             ha="center",
         )
         time_axis_x = (
@@ -305,31 +363,13 @@ def plot_matchup_portrait(
             ax.tick_params(axis="x", labeltop=True, labelbottom=False)
         probability_ax.set_xlim(-left_extent, right_extent)
         probability_ax.set_xticks(ticks, labels)
-        display_edge = (
-            50 - pd.to_numeric(frames[0][WIN_CHANCE_COL], errors="coerce") * 100
+        even_label = next(
+            label
+            for label in probability_ax.get_xticklabels()
+            if label.get_text() == "EVEN"
         )
-        display_edge = display_edge[np.isfinite(display_edge)]
-        left_required = max(float(-display_edge.min()), 0.0)
-        right_required = max(float(display_edge.max()), 0.0)
-        desired_xlim = (-left_extent, right_extent)
-        even_fraction = left_extent / (left_extent + right_extent)
-        logger.info(
-            "Portrait signed display edge: min=%.1f max=%.1f; "
-            "left_required=%.1f right_required=%.1f; "
-            "left_extent=%.1f right_extent=%.1f desired_xlim=%s",
-            float(display_edge.min()),
-            float(display_edge.max()),
-            left_required,
-            right_required,
-            left_extent,
-            right_extent,
-            desired_xlim,
-        )
-        logger.info(
-            "Portrait xlim immediately after set_xlim: %s; even_fraction=%.4f",
-            probability_ax.get_xlim(),
-            even_fraction,
-        )
+        even_label.set_fontweight("medium")
+        even_label.set_color("#555555")
         minor_ticks = tuple(
             value
             for value in np.arange(-left_extent, right_extent + 1.25, 2.5)
@@ -357,7 +397,7 @@ def plot_matchup_portrait(
                 color=TEAM_FILL_COLORS[1],
                 alpha=0.54,
             )
-            probability_ax.plot(edge, time_values, color="#222222", lw=1.8)
+            _plot_colored_probability_path(probability_ax, edge, time_values)
             for frame, color in zip(frames, TEAM_COLORS):
                 selected = frame[frame[TIMESTAMP_COL].between(first, last)]
                 points_ax.plot(
@@ -386,8 +426,8 @@ def plot_matchup_portrait(
                     ax.hlines(
                         y,
                         *ax.get_xlim(),
-                        color="#ededed",
-                        lw=0.45,
+                        color="#dddddd",
+                        lw=0.5,
                         zorder=0.5,
                     )
                 x_grid = ax.get_xticks()
@@ -398,8 +438,8 @@ def plot_matchup_portrait(
                         x,
                         mapped_start,
                         mapped_end,
-                        color="#ededed",
-                        lw=0.45,
+                        color="#dddddd",
+                        lw=0.5,
                         zorder=0.5,
                     )
                 if ax is probability_ax:
@@ -409,7 +449,7 @@ def plot_matchup_portrait(
                         mapped_end,
                         color="#b0b0b0",
                         lw=0.85,
-                        zorder=1.8,
+                        zorder=0.8,
                     )
 
         # Render one shared clock/date axis in the gutter between the plots.
@@ -474,7 +514,8 @@ def plot_matchup_portrait(
                 annotation_clip=False,
             )
         # Latest actual points stay primary; projections are secondary below them.
-        for index, (frame, color) in enumerate(zip(frames, TEAM_COLORS)):
+        endpoint_specs = []
+        for frame, color in zip(frames, TEAM_COLORS):
             valid = frame[frame[SCORE_COL].notna()]
             if valid.empty:
                 continue
@@ -491,15 +532,23 @@ def plot_matchup_portrait(
                 clip_on=False,
                 zorder=5,
             )
-            x_min, x_max = points_ax.get_xlim()
-            place_right = score <= (x_min + x_max) / 2
-            horizontal_offset = 8 if place_right else -8
             projected = row[PROJECTED_COL]
-            label = f"Proj {projected:.1f}" if pd.notna(projected) else "Proj --"
+            endpoint_specs.append(
+                (
+                    score,
+                    point_time,
+                    color,
+                    f"{score:.1f}",
+                    f"Proj {projected:.1f}" if pd.notna(projected) else "Proj --",
+                )
+            )
+
+        def add_endpoint_label(spec, place_right):
+            score, point_time, color, score_text, projection_text = spec
             annotation_lines = VPacker(
                 children=[
                     TextArea(
-                        f"{score:.1f}",
+                        score_text,
                         textprops={
                             "color": color,
                             "fontproperties": TEAM_FONT,
@@ -507,11 +556,11 @@ def plot_matchup_portrait(
                         },
                     ),
                     TextArea(
-                        label,
+                        projection_text,
                         textprops={
                             "color": color,
                             "fontsize": 11.5,
-                            "alpha": 0.85,
+                            "alpha": 0.95,
                         },
                     ),
                 ],
@@ -519,27 +568,44 @@ def plot_matchup_portrait(
                 sep=-1,
                 pad=0,
             )
-            points_ax.add_artist(
-                AnnotationBbox(
-                    annotation_lines,
-                    (score, point_time),
-                    xybox=(horizontal_offset, 0),
-                    xycoords="data",
-                    boxcoords="offset points",
-                    box_alignment=(0, 0.5) if place_right else (1, 0.5),
-                    frameon=False,
-                    pad=0,
-                    annotation_clip=False,
-                    zorder=6,
-                )
+            artist = AnnotationBbox(
+                annotation_lines,
+                (score, point_time),
+                xybox=(8 if place_right else -8, 0),
+                xycoords="data",
+                boxcoords="offset points",
+                box_alignment=(0, 0.5) if place_right else (1, 0.5),
+                frameon=False,
+                pad=0,
+                annotation_clip=False,
+                zorder=6,
             )
+            points_ax.add_artist(artist)
+            return artist
+
+        # Both labels start on the right; only a rendered collision flips Team 1.
+        labels = [add_endpoint_label(spec, True) for spec in endpoint_specs]
+        if len(labels) == 2:
+            fig.canvas.draw()
+            renderer = fig.canvas.get_renderer()
+            if (
+                labels[0]
+                .get_window_extent(renderer)
+                .overlaps(labels[1].get_window_extent(renderer))
+            ):
+                labels[0].remove()
+                labels[0] = add_endpoint_label(endpoint_specs[0], False)
+
+        # Keep right-side labels inside the card as an edge-case fallback.
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        card_right = fig.bbox.x1 - 2
+        for index, artist in enumerate(labels):
+            if artist.get_window_extent(renderer).x1 > card_right:
+                artist.remove()
+                labels[index] = add_endpoint_label(endpoint_specs[index], False)
         final_left, final_right = probability_ax.get_xlim()
         final_even_fraction = (0 - final_left) / (final_right - final_left)
-        logger.info(
-            "Portrait final probability xlim: %s; even_fraction=%.4f",
-            probability_ax.get_xlim(),
-            final_even_fraction,
-        )
         assert np.isclose(final_left, -left_extent)
         assert np.isclose(final_right, right_extent)
         if left_extent != right_extent:
