@@ -107,6 +107,11 @@ def build_parser() -> argparse.ArgumentParser:
     analyze.add_argument("--season", type=int, required=True)
     analyze.add_argument("--week", type=int, required=True)
     analyze.add_argument(
+        "--portrait",
+        action="store_true",
+        help="Render experimental portrait PNGs with time running downward; landscape files are preserved.",
+    )
+    analyze.add_argument(
         "--full-edge-scale",
         action="store_true",
         help="Use the full 0-100%% Edge scale instead of symmetric auto-zoom.",
@@ -259,6 +264,7 @@ def _analyze(args: argparse.Namespace) -> int:
                 output_dir=output,
                 league_name=name,
                 full_edge_scale=args.full_edge_scale,
+                portrait=args.portrait,
             )
             for path in paths:
                 print(path)

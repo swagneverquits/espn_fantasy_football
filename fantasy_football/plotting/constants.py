@@ -2,9 +2,14 @@
 
 from matplotlib.font_manager import FontProperties, fontManager
 
-# Team and font styling: real bold text, with per-glyph emoji fallback.
-TEAM_COLORS = ("#d49a00", "#5b2a86")
+# Foregrounds use a slightly darker amber; probability fills retain their color.
+TEAM_COLORS = ("#b88600", "#5b2a86")
+TEAM_FILL_COLORS = ("#d49a00", "#5b2a86")
 _AVAILABLE_FONTS = {font.name for font in fontManager.ttflist}
+_HAS_SEMIBOLD = any(
+    font.name == "Segoe UI" and font.weight == 600 and font.style == "normal"
+    for font in fontManager.ttflist
+)
 TEAM_FONT = FontProperties(
     family=[
         name
@@ -17,7 +22,7 @@ TEAM_FONT = FontProperties(
         )
         if name in _AVAILABLE_FONTS
     ],
-    weight="bold",
+    weight="semibold" if _HAS_SEMIBOLD else "bold",
 )
 
 # Figure typography

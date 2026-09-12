@@ -30,6 +30,7 @@ from fantasy_football.plotting.constants import (
     SCORE_COL,
     TEAM_COL,
     TEAM_COLORS,
+    TEAM_FILL_COLORS,
     TEAM_FONT,
     TEAM_LABEL_SIZE,
     TICK_SIZE,
@@ -96,7 +97,7 @@ def plot_matchup(
         left=0.04, right=0.94, top=0.86, bottom=0.11, wspace=0.014, hspace=0.24
     )
     fig.suptitle(
-        f"{league_name} | {season} Week {week} | Matchup {matchup}",
+        f"{league_name} \u00b7 {season} Week {week} \u00b7 Matchup {matchup}",
         fontsize=MAIN_TITLE_SIZE,
         fontweight="bold",
         x=0.04,
@@ -111,10 +112,10 @@ def plot_matchup(
             edge = (edge_data[WIN_CHANCE_COL] - 0.5) * 100
             x = edge_data.index
             edge_ax.fill_between(
-                x, 0, edge, where=edge >= 0, color=TEAM_COLORS[0], alpha=0.54
+                x, 0, edge, where=edge >= 0, color=TEAM_FILL_COLORS[0], alpha=0.54
             )
             edge_ax.fill_between(
-                x, 0, edge, where=edge < 0, color=TEAM_COLORS[1], alpha=0.54
+                x, 0, edge, where=edge < 0, color=TEAM_FILL_COLORS[1], alpha=0.54
             )
             edge_ax.plot(x, edge, color="#222222", lw=1.8)
         for frame, color in zip(frames, TEAM_COLORS):
@@ -333,7 +334,6 @@ def plot_matchup(
         textwrap.fill(teams[0], 28),
         color=TEAM_COLORS[0],
         fontsize=TEAM_LABEL_SIZE,
-        fontweight="bold",
         fontproperties=TEAM_FONT,
         va="center",
         ha="center",
@@ -346,7 +346,6 @@ def plot_matchup(
         textwrap.fill(teams[1], 28),
         color=TEAM_COLORS[1],
         fontsize=TEAM_LABEL_SIZE,
-        fontweight="bold",
         fontproperties=TEAM_FONT,
         va="center",
         ha="center",
@@ -420,6 +419,7 @@ def generate_matchup_plots(
     window_gap_seconds: int = 30 * 60,
     full_edge_scale: bool = False,
     season: int | None = None,
+    portrait: bool = False,
 ) -> list[Path]:
     """Render every matchup from already loaded data; no configuration or queries."""
     if data.empty:
@@ -428,11 +428,16 @@ def generate_matchup_plots(
     if data[LEAGUE_NAME_COL].notna().any():
         league_name = data[LEAGUE_NAME_COL].dropna().iloc[-1]
     paths = []
+    renderer = plot_matchup
+    if portrait:
+        from .portrait import plot_matchup_portrait
+
+        renderer = plot_matchup_portrait
     for number, (matchup_id, matchup) in enumerate(
         data.groupby(MATCHUP_ID_COL, sort=True), start=1
     ):
         paths.append(
-            plot_matchup(
+            renderer(
                 matchup,
                 league_name=league_name,
                 week=week,
@@ -440,7 +445,8 @@ def generate_matchup_plots(
                 window_gap_seconds=window_gap_seconds,
                 full_edge_scale=full_edge_scale,
                 season=season,
-                savepath=Path(output_dir) / f"matchup{number}.png",
+                savepath=Path(output_dir)
+                / f"matchup{number}{'_portrait' if portrait else ''}.png",
             )
         )
     return paths
