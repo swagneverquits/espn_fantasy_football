@@ -114,6 +114,12 @@ def _add_analyze_parser(commands: argparse._SubParsersAction) -> None:
         choices=("espn", "sleeper"),
         help="Filter --all by provider; defaults to ESPN for a single league.",
     )
+    analyze.add_argument(
+        "--tag-swings",
+        type=float,
+        metavar="PP",
+        help="Tag every win-probability swing of at least PP percentage points.",
+    )
 
 
 def _add_sync_parser(commands: argparse._SubParsersAction) -> None:
@@ -269,6 +275,7 @@ def _analyze(args: argparse.Namespace) -> int:
                 season=args.season,
                 output_dir=output,
                 league_name=name,
+                tag_swings=args.tag_swings,
             )
             for path in paths:
                 print(path)

@@ -36,6 +36,7 @@ from .constants import (
     WIN_CHANCE_COL,
 )
 from .timeline import compressed_timeline, game_windows
+from .swings import probability_swings
 
 
 def _asymmetric_probability_scale(
@@ -155,6 +156,7 @@ def plot_matchup(
     savepath: str | Path,
     window_gap_seconds: int = 1800,
     season: int | None = None,
+    tag_swings: float | None = None,
 ) -> Path:
     """Render a phone-oriented 1080x1350 matchup PNG."""
     data = matchup_df.copy()
@@ -384,6 +386,26 @@ def plot_matchup(
                     lw=2,
                     zorder=3,
                     clip_on=False,
+                )
+
+        if tag_swings is not None:
+            swings = probability_swings(frames[0], minimum_pp=tag_swings)
+            for swing in swings:
+                edge = 50 - swing.after * 100
+                point_time = map_time([mdates.date2num(swing.timestamp)])[0]
+                sign = "+" if swing.delta_pp > 0 else ""
+                probability_ax.annotate(
+                    f"Δ {sign}{swing.delta_pp:.0f} pp",
+                    (edge, point_time),
+                    xytext=(10 if edge >= 0 else -10, -10),
+                    textcoords="offset points",
+                    ha="left" if edge >= 0 else "right",
+                    va="top",
+                    color="#4A4A4A",
+                    fontsize=10,
+                    fontweight="medium",
+                    annotation_clip=False,
+                    zorder=5,
                 )
         actual = pd.to_numeric(data[SCORE_COL], errors="coerce")
         actual = actual[np.isfinite(actual)]

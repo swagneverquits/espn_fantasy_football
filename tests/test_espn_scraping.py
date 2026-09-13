@@ -2,6 +2,7 @@ import datetime
 import unittest
 
 from fantasy_football.scrapers.espn.parser import (
+    _applied_stats_json,
     _player_data,
     current_week,
     parse_snapshot,
@@ -95,6 +96,10 @@ class ESPNScrapingTests(unittest.TestCase):
 
 
 class ESPNPlayerTests(unittest.TestCase):
+    def test_applied_stats_are_compact_json(self):
+        self.assertEqual(_applied_stats_json({"43": 1, "42": 45}), '{"42":45,"43":1}')
+        self.assertIsNone(_applied_stats_json({}))
+
     def test_espn_actual_and_projection_use_current_scoring_period(self):
         data = {
             "scoringPeriodId": 3,
@@ -120,6 +125,7 @@ class ESPNPlayerTests(unittest.TestCase):
                                                     "scoringPeriodId": 3,
                                                     "statSourceId": 0,
                                                     "appliedTotal": 12,
+                                                    "appliedStats": {"42": 45, "43": 1},
                                                 },
                                                 {
                                                     "scoringPeriodId": 3,
@@ -152,5 +158,7 @@ class ESPNPlayerTests(unittest.TestCase):
             ],
         }
         rows, _ = _player_data(data, "123", 2026, 2, 1)
-        self.assertEqual(rows[0][9:], (12, 18, 24, 6))
-        self.assertEqual(rows[1][9:], (None, None, None, None))
+        self.assertEqual(rows[0][9:13], (12, 18, 24, 6))
+        self.assertEqual(rows[0][13], '{"42":45,"43":1}')
+        self.assertEqual(len(rows[0]), 14)
+        self.assertEqual(rows[1][9:], (None,) * 5)

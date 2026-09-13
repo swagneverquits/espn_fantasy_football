@@ -26,6 +26,7 @@ def generate_matchup_plots(
     league_name: str,
     window_gap_seconds: int = 30 * 60,
     season: int | None = None,
+    tag_swings: float | None = None,
 ) -> list[Path]:
     """Render every matchup as a phone-oriented portrait PNG."""
     if data.empty:
@@ -47,6 +48,7 @@ def generate_matchup_plots(
                 matchup=matchup_id,
                 window_gap_seconds=window_gap_seconds,
                 season=season,
+                tag_swings=tag_swings,
                 savepath=Path(output_dir) / f"matchup{number}.png",
             )
         )

@@ -1,5 +1,6 @@
 """Normalize ESPN payloads into the common snapshot tables."""
 
+import json
 import logging
 import time
 
@@ -14,6 +15,13 @@ def current_week(data: dict) -> int:
     if not week:
         raise ValueError("ESPN response did not contain a current matchup period")
     return int(week)
+
+
+def _applied_stats_json(stats: dict) -> str | None:
+    """Serialize ESPN's scoring breakdown compactly for later attribution."""
+    if not stats:
+        return None
+    return json.dumps(stats, separators=(",", ":"), sort_keys=True)
 
 
 def parse_snapshot(
@@ -54,9 +62,7 @@ def parse_snapshot(
             "team_name": team.get("name"),
             "logo_url": team.get("logo"),
             "wins": ((team.get("record") or {}).get("overall") or {}).get("wins"),
-            "losses": ((team.get("record") or {}).get("overall") or {}).get(
-                "losses"
-            ),
+            "losses": ((team.get("record") or {}).get("overall") or {}).get("losses"),
             "ties": ((team.get("record") or {}).get("overall") or {}).get("ties"),
         }
         for team in data.get("teams", [])
@@ -138,6 +144,7 @@ def _player_data(
                         projected,
                         ceiling,
                         spread,
+                        _applied_stats_json(actual.get("appliedStats") or {}),
                     )
                 )
                 metadata[player_id] = (

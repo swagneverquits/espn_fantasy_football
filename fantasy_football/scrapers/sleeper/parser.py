@@ -171,6 +171,7 @@ def _player_data(
                     projected,
                     None,
                     None,
+                    None,
                 )
             )
             metadata[player_key] = (

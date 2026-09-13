@@ -7,9 +7,42 @@ import pandas as pd
 from fantasy_football.plotting import generate_matchup_plots
 from fantasy_football.plotting.matchups import normalize_team_names
 from fantasy_football.plotting.timeline import game_windows
+from fantasy_football.plotting.swings import (
+    largest_probability_swings,
+    probability_swings,
+)
 
 
 class PlottingTests(unittest.TestCase):
+    def test_largest_probability_swings_preserves_ties(self):
+        frame = pd.DataFrame(
+            {
+                "timestamp": [1, 2, 3, 4],
+                "win_probability": [0.50, 0.55, 0.50, 0.55],
+            }
+        )
+        swings = largest_probability_swings(frame)
+        self.assertEqual(len(swings), 3)
+        self.assertAlmostEqual(swings[0].delta_pp, 5.0)
+        self.assertAlmostEqual(swings[1].delta_pp, -5.0)
+        self.assertAlmostEqual(swings[2].delta_pp, 5.0)
+
+    def test_largest_probability_swings_ignores_single_observation(self):
+        frame = pd.DataFrame({"timestamp": [1], "win_probability": [0.5]})
+        self.assertEqual(largest_probability_swings(frame), [])
+
+    def test_probability_swings_uses_threshold_and_preserves_ties(self):
+        frame = pd.DataFrame(
+            {
+                "timestamp": [1, 2, 3, 4],
+                "win_probability": [0.50, 0.55, 0.50, 0.51],
+            }
+        )
+        swings = probability_swings(frame, minimum_pp=5)
+        self.assertEqual(len(swings), 2)
+        self.assertAlmostEqual(swings[0].delta_pp, 5.0)
+        self.assertAlmostEqual(swings[1].delta_pp, -5.0)
+
     def test_names_follow_team_ids_when_row_order_changes(self):
         data = pd.DataFrame(
             [
