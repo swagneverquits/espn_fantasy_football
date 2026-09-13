@@ -10,7 +10,7 @@ fantasy_football/
   config.py             Explicit TOML league configuration loading
   storage/              Raw Parquet objects, snapshot pipeline, and DuckDB queries
   scrapers/             Shared provider interface plus ESPN and Sleeper implementations
-  schedule/             NFL schedule acquisition, caching, and game windows
+  scrapers/schedule/    NFL schedule acquisition, caching, and game windows
   snapshot.py           Shared five-table DataFrame contract
   runtime/              Polling, retries, worker supervision, and heartbeats
   terminal/             Live scraper dashboard and sync progress display

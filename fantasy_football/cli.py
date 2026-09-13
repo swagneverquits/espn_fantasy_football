@@ -5,7 +5,7 @@ import logging
 import os
 from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from fantasy_football.config import load_leagues
 from fantasy_football.constants import (
@@ -22,23 +22,27 @@ if TYPE_CHECKING:
     from fantasy_football.storage.writer import ParquetSnapshotWriter
 
 
-def _configured_writer(storage_mode: str = "local") -> "ParquetSnapshotWriter":
+StorageMode = Literal["local", "gcs"]
+
+
+def _configured_writer(storage_mode: StorageMode = "local") -> "ParquetSnapshotWriter":
     """Resolve runtime storage settings before constructing the writer."""
     from fantasy_football.storage.writer import build_writer
 
-    if storage_mode not in {"local", "gcs"}:
-        raise ValueError("storage_mode must be 'local' or 'gcs'")
     if storage_mode == "local":
         if os.getenv("FANTASY_FOOTBALL_WORKER") != "1":
             logging.info("Snapshot destination: local path=%s", PARQUET_DIR)
         return build_writer()
 
-    bucket = os.getenv("GCS_BUCKET")
-    if not bucket:
-        raise ValueError("GCS_BUCKET is required when storage_mode='gcs'")
-    if os.getenv("FANTASY_FOOTBALL_WORKER") != "1":
-        logging.info("Snapshot destination: GCS bucket=%s", bucket)
-    return build_writer(bucket=bucket)
+    if storage_mode == "gcs":
+        bucket = os.getenv("GCS_BUCKET")
+        if not bucket:
+            raise ValueError("GCS_BUCKET is required when storage_mode='gcs'")
+        if os.getenv("FANTASY_FOOTBALL_WORKER") != "1":
+            logging.info("Snapshot destination: GCS bucket=%s", bucket)
+        return build_writer(bucket=bucket)
+
+    raise ValueError("storage_mode must be 'local' or 'gcs'")
 
 
 def _add_polling_args(parser: argparse.ArgumentParser) -> None:
@@ -76,15 +80,7 @@ def _add_polling_args(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Fantasy football scraping tools.")
-    parser.add_argument(
-        "--config",
-        type=Path,
-        default=LEAGUE_CONFIG_PATH,
-        help="League TOML configuration path.",
-    )
-    commands = parser.add_subparsers(dest="command", required=True)
+def _add_scrape_parser(commands: argparse._SubParsersAction) -> None:
     scrape = commands.add_parser("scrape", help="Collect live league snapshots.")
     providers = scrape.add_subparsers(dest="provider", required=True)
 
@@ -101,6 +97,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_polling_args(all_leagues)
 
+
+def _add_analyze_parser(commands: argparse._SubParsersAction) -> None:
     analyze = commands.add_parser(
         "analyze", help="Generate matchup plots from local DuckDB/Parquet data."
     )
@@ -117,6 +115,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Filter --all by provider; defaults to ESPN for a single league.",
     )
 
+
+def _add_sync_parser(commands: argparse._SubParsersAction) -> None:
     sync = commands.add_parser(
         "sync", help="Download one or all leagues for a week from GCS."
     )
@@ -136,6 +136,8 @@ def build_parser() -> argparse.ArgumentParser:
     sync.add_argument("--output-dir", type=Path, default=PARQUET_DIR)
     sync.add_argument("--tables", nargs="+", choices=PARQUET_TABLES)
 
+
+def _add_status_parser(commands: argparse._SubParsersAction) -> None:
     status = commands.add_parser("status", help="Show remote scraper worker status.")
     status.add_argument(
         "--watch",
@@ -143,6 +145,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="Refresh the dashboard until Ctrl+C; scraping continues independently.",
     )
 
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Fantasy football scraping tools.")
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=LEAGUE_CONFIG_PATH,
+        help="League TOML configuration path.",
+    )
+    commands = parser.add_subparsers(dest="command", required=True)
+    _add_scrape_parser(commands)
+    _add_analyze_parser(commands)
+    _add_sync_parser(commands)
+    _add_status_parser(commands)
     return parser
 
 
@@ -271,59 +287,65 @@ def _analyze(args: argparse.Namespace) -> int:
     return int(failed or not plotted)
 
 
+def _scrape(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    from fantasy_football.runtime.polling import Poller
+    from fantasy_football.runtime.workers import RunOptions, run_all
+
+    options = RunOptions(
+        season=args.season,
+        interval_seconds=args.interval,
+        retry_seconds=args.retry_interval,
+        once=args.once,
+        schedule_gate=not args.no_schedule_gate,
+        storage_mode=args.storage,
+    )
+    if options.interval_seconds <= 0 or options.retry_seconds <= 0:
+        parser.error("Polling and retry intervals must be positive")
+    if args.provider == "all":
+        return run_all(load_leagues(args.config), options)
+    if args.provider == "espn":
+        from fantasy_football.scrapers.espn.scraper import ESPNScraper
+
+        league_id = load_leagues(args.config).league_id("espn", args.league)
+        scraper = ESPNScraper(league_id, season=args.season)
+    else:
+        from fantasy_football.scrapers.sleeper.scraper import SleeperScraper
+
+        league_id = args.league_id
+        scraper = SleeperScraper(league_id, season=args.season)
+    from fantasy_football.runtime.status import WorkerStatus
+
+    worker_status = WorkerStatus(args.provider, str(league_id))
+    Poller(scraper, _configured_writer(args.storage), status=worker_status).run(
+        interval_seconds=options.interval_seconds,
+        retry_seconds=options.retry_seconds,
+        once=options.once,
+        schedule_gate=options.schedule_gate,
+    )
+    return 0
+
+
+def _status(args: argparse.Namespace) -> int:
+    from fantasy_football.terminal.dashboard import show_status
+
+    return show_status(load_leagues(args.config), watch=args.watch)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
     )
     parser = build_parser()
     args = parser.parse_args(argv)
-    if args.command == "scrape":
-        from fantasy_football.runtime.polling import Poller
-        from fantasy_football.runtime.workers import RunOptions, run_all
-
-        options = RunOptions(
-            args.season,
-            args.interval,
-            args.retry_interval,
-            args.once,
-            not args.no_schedule_gate,
-            args.storage,
-        )
-        if options.interval_seconds <= 0 or options.retry_seconds <= 0:
-            parser.error("Polling and retry intervals must be positive")
-        if args.provider == "all":
-            return run_all(load_leagues(args.config), options)
-        if args.provider == "espn":
-            from fantasy_football.scrapers.espn.scraper import ESPNScraper
-
-            league_id = load_leagues(args.config).league_id("espn", args.league)
-            scraper = ESPNScraper(league_id, season=args.season)
-        else:
-            from fantasy_football.scrapers.sleeper.scraper import SleeperScraper
-
-            scraper = SleeperScraper(args.league_id, season=args.season)
-        from fantasy_football.runtime.status import WorkerStatus
-
-        worker_status = WorkerStatus(
-            args.provider, str(league_id if args.provider == "espn" else args.league_id)
-        )
-        Poller(scraper, _configured_writer(args.storage), status=worker_status).run(
-            interval_seconds=options.interval_seconds,
-            retry_seconds=options.retry_seconds,
-            once=options.once,
-            schedule_gate=options.schedule_gate,
-        )
-    elif args.command == "status":
-        from fantasy_football.terminal.dashboard import show_status
-
-        return show_status(load_leagues(args.config), watch=args.watch)
-    elif args.command == "sync":
-        if not args.all and args.provider is None:
-            parser.error("--provider is required with --league-id")
-        return _sync(args)
-    else:
-        return _analyze(args)
-    return 0
+    handlers = {
+        "scrape": lambda: _scrape(args, parser),
+        "status": lambda: _status(args),
+        "sync": lambda: _sync(args),
+        "analyze": lambda: _analyze(args),
+    }
+    if args.command == "sync" and not args.all and args.provider is None:
+        parser.error("--provider is required with --league-id")
+    return handlers[args.command]()
 
 
 if __name__ == "__main__":

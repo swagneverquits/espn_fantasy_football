@@ -79,8 +79,8 @@ def dashboard(leagues: LeagueConfig, root: Path = STATUS_DIR) -> Group:
     from rich.table import Table
     from rich.text import Text
 
-    from fantasy_football.schedule.cache import read_cached_schedule
-    from fantasy_football.schedule.windows import (
+    from fantasy_football.scrapers.schedule.cache import read_cached_schedule
+    from fantasy_football.scrapers.schedule.windows import (
         active_window,
         build_game_windows,
     )

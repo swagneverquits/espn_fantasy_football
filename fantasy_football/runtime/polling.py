@@ -14,8 +14,8 @@ from fantasy_football.constants import (
     DEFAULT_SCHEDULE_REFRESH_SECONDS,
 )
 from fantasy_football.runtime.status import WorkerStatus
-from fantasy_football.schedule.cache import get_game_starts
-from fantasy_football.schedule.windows import (
+from fantasy_football.scrapers.schedule.cache import get_game_starts
+from fantasy_football.scrapers.schedule.windows import (
     active_window,
     build_game_windows,
     seconds_until_next_window,
