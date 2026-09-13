@@ -1,5 +1,6 @@
 """Normalize Sleeper payloads into the common snapshot tables."""
 
+import json
 import math
 import time
 
@@ -25,6 +26,31 @@ def _projection_or_zero(value: object) -> float:
     except (TypeError, ValueError, OverflowError):
         return 0.0
     return projected if math.isfinite(projected) else 0.0
+
+
+def _applied_points_json(
+    total: object, stats: dict, scoring_settings: dict
+) -> str | None:
+    """Calculate and serialize Sleeper's applied scoring components."""
+    if total is None and not stats:
+        return None
+    components = {}
+    for key, value in stats.items():
+        try:
+            multiplier = float(scoring_settings.get(key, 0))
+            stat_value = float(value)
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(multiplier) or not math.isfinite(stat_value):
+            continue
+        contribution = multiplier * stat_value
+        if contribution:
+            components[key] = round(contribution, 4)
+    return json.dumps(
+        {"total": total, "components": components},
+        separators=(",", ":"),
+        sort_keys=True,
+    )
 
 
 def _projected_totals(data):
@@ -132,7 +158,8 @@ def _player_data(
 ) -> tuple[list[tuple], list[tuple]]:
     snapshots = []
     metadata = {}
-    scoring_key = _projection_key((data.get("league") or {}).get("scoring_settings"))
+    scoring_settings = (data.get("league") or {}).get("scoring_settings") or {}
+    scoring_key = _projection_key(scoring_settings)
     projections = {
         str(player.get("player_id")): player
         for player in (data.get("player_data") or {}).get("projections", [])
@@ -171,7 +198,9 @@ def _player_data(
                     projected,
                     None,
                     None,
-                    None,
+                    _applied_points_json(
+                        actual, stat.get("stats") or {}, scoring_settings
+                    ),
                 )
             )
             metadata[player_key] = (

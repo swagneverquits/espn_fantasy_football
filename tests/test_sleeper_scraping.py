@@ -7,13 +7,26 @@ from unittest.mock import patch
 import pandas as pd
 
 from fantasy_football.constants import DEFAULT_SCHEDULE_REFRESH_SECONDS
-from fantasy_football.scrapers.sleeper.parser import parse_snapshot
+from fantasy_football.scrapers.sleeper.parser import (
+    _applied_points_json,
+    parse_snapshot,
+)
 from fantasy_football.scrapers.sleeper.scraper import SleeperScraper
 from fantasy_football.scrapers.sleeper.win_probability import sleeper_win_percentage
 from fantasy_football.storage.writer import build_writer
 
 
 class SleeperScrapingTests(unittest.TestCase):
+    def test_applied_points_are_calculated_from_scoring_settings(self):
+        self.assertEqual(
+            _applied_points_json(
+                12.9,
+                {"rec": 7, "rec_yd": 59, "bonus_rec_te": 7},
+                {"rec": 0.5, "rec_yd": 0.1, "bonus_rec_te": 0.5},
+            ),
+            '{"components":{"bonus_rec_te":3.5,"rec":3.5,"rec_yd":5.9},"total":12.9}',
+        )
+
     def test_matchup_rows_normalizes_rosters(self):
         data = {
             "week": 1,

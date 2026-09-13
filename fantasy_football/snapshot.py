@@ -37,7 +37,7 @@ SCHEMAS = {
         "projected",
         "ceiling",
         "projection_spread",
-        "applied_stats_json",
+        "applied_points_json",
     ),
     "team_metadata": (
         *WEEK_IDENTITY,

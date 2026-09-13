@@ -17,11 +17,15 @@ def current_week(data: dict) -> int:
     return int(week)
 
 
-def _applied_stats_json(stats: dict) -> str | None:
-    """Serialize ESPN's scoring breakdown compactly for later attribution."""
-    if not stats:
+def _applied_points_json(total: object, components: dict) -> str | None:
+    """Serialize ESPN's applied scoring breakdown compactly."""
+    if total is None and not components:
         return None
-    return json.dumps(stats, separators=(",", ":"), sort_keys=True)
+    return json.dumps(
+        {"total": total, "components": components},
+        separators=(",", ":"),
+        sort_keys=True,
+    )
 
 
 def parse_snapshot(
@@ -144,7 +148,10 @@ def _player_data(
                         projected,
                         ceiling,
                         spread,
-                        _applied_stats_json(actual.get("appliedStats") or {}),
+                        _applied_points_json(
+                            actual.get("appliedTotal"),
+                            actual.get("appliedStats") or {},
+                        ),
                     )
                 )
                 metadata[player_id] = (
