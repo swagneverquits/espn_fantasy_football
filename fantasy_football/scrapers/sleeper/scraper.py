@@ -60,6 +60,51 @@ def fetch_data_json(path: str, *, timeout: int = 30):
         raise SleeperAPIError("Sleeper data API returned invalid JSON") from exc
 
 
+def fetch_graphql_json(query: str, *, timeout: int = 30):
+    """Fetch a read-only query from Sleeper's public GraphQL endpoint."""
+    payload = json.dumps({"query": query}).encode("utf-8")
+    try:
+        request = Request(
+            f"{SLEEPER_DATA_HOST}/graphql",
+            data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "Fantasy Football collector",
+            },
+            method="POST",
+        )
+        with urlopen(request, timeout=timeout) as response:
+            result = json.load(response)
+    except HTTPError as exc:
+        raise SleeperAPIError(f"Sleeper GraphQL API returned HTTP {exc.code}") from exc
+    except URLError as exc:
+        raise SleeperAPIError(
+            f"Could not reach Sleeper GraphQL API: {exc.reason}"
+        ) from exc
+    except ValueError as exc:
+        raise SleeperAPIError("Sleeper GraphQL API returned invalid JSON") from exc
+    if result.get("errors"):
+        raise SleeperAPIError(f"Sleeper GraphQL query failed: {result['errors']}")
+    return result.get("data", {})
+
+
+def fetch_weekly_scores(sport: str, season: int, week: int):
+    """Fetch live game metadata used for remaining-time calculations."""
+    query = f"""query scores {{
+      scores(sport: "{sport}", season_type: "regular", season: "{season}", week: {week}) {{
+        game_id
+        metadata
+        season
+        season_type
+        sport
+        status
+        week
+        start_time
+      }}
+    }}"""
+    return fetch_graphql_json(query).get("scores", [])
+
+
 def fetch_weekly_player_data(sport: str, season: int, week: int):
     """Fetch the raw weekly stats and projections used by the web app."""
     suffix = f"/{sport}/{season}/{week}?season_type=regular"
@@ -110,5 +155,6 @@ class SleeperScraper(Scraper):
             "player_data": fetch_weekly_player_data(
                 league["sport"], int(league["season"]), week
             ),
+            "scores": fetch_weekly_scores(league["sport"], int(league["season"]), week),
         }
         return parse_snapshot(data, league_id=self.league_id, season=self.season)

@@ -7,7 +7,11 @@ import time
 from fantasy_football.constants import MATCHUP_ID_COL
 from fantasy_football.snapshot import Snapshot
 
-from .win_probability import sleeper_win_percentage
+from .win_probability import (
+    nfl_remaining_seconds,
+    sleeper_dynamic_projection,
+    sleeper_win_percentage,
+)
 
 
 def _projection_key(scoring_settings):
@@ -79,6 +83,67 @@ def _projected_totals(data):
     return totals
 
 
+def _remaining_seconds_by_team(data: dict) -> dict[str, int]:
+    """Map NFL team codes to the live seconds remaining in their games."""
+    remaining = {}
+    for score in data.get("scores", []):
+        metadata = score.get("metadata") or {}
+        seconds = nfl_remaining_seconds(metadata)
+        for key in ("home_team", "away_team"):
+            team = metadata.get(key)
+            if team:
+                remaining[str(team)] = seconds
+    return remaining
+
+
+def _dynamic_projected_totals(data: dict) -> dict:
+    """Calculate Sleeper's live projection total for each fantasy roster."""
+    league = data.get("league", {})
+    scoring_key = _projection_key(league.get("scoring_settings"))
+    projections = {
+        str(item.get("player_id")): item
+        for item in data.get("player_data", {}).get("projections", [])
+        if item.get("player_id") is not None
+    }
+    stats = {
+        str(item.get("player_id")): item
+        for item in data.get("player_data", {}).get("stats", [])
+        if item.get("player_id") is not None
+    }
+    remaining_by_team = _remaining_seconds_by_team(data)
+    totals = {}
+    for matchup in data.get("matchups", []):
+        total = 0.0
+        for player_id in matchup.get("starters", []):
+            if player_id is None or str(player_id) in {"", "0"}:
+                continue
+            player_key = str(player_id)
+            projection = projections.get(player_key, {})
+            stat = stats.get(player_key, {})
+            projected = _projection_or_zero(
+                (projection.get("stats") or {}).get(scoring_key)
+            )
+            actual = (matchup.get("players_points") or {}).get(player_key)
+            if actual is None:
+                actual = (stat.get("stats") or {}).get(scoring_key)
+            player = projection.get("player") or stat.get("player") or {}
+            team = (
+                player.get("team")
+                or projection.get("team")
+                or stat.get("team")
+                or (player_key if player_key.isalpha() else None)
+            )
+            remaining_seconds = remaining_by_team.get(team, 3600)
+            total += sleeper_dynamic_projection(
+                actual,
+                projected,
+                remaining_seconds,
+                is_team_defense=player_key.isalpha(),
+            )
+        totals[matchup["roster_id"]] = total
+    return totals
+
+
 def parse_snapshot(
     data: dict, *, league_id: str | int, season: int, timestamp: int | None = None
 ) -> Snapshot:
@@ -102,7 +167,7 @@ def parse_snapshot(
                 "ties": settings.get("ties"),
             }
         )
-    projected = _projected_totals(data)
+    projected = _dynamic_projected_totals(data)
     matchups = [
         row for row in data.get("matchups", []) if row.get("matchup_id") is not None
     ]

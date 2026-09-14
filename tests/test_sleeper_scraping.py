@@ -12,7 +12,11 @@ from fantasy_football.scrapers.sleeper.parser import (
     parse_snapshot,
 )
 from fantasy_football.scrapers.sleeper.scraper import SleeperScraper
-from fantasy_football.scrapers.sleeper.win_probability import sleeper_win_percentage
+from fantasy_football.scrapers.sleeper.win_probability import (
+    nfl_remaining_seconds,
+    sleeper_dynamic_projection,
+    sleeper_win_percentage,
+)
 from fantasy_football.storage.writer import build_writer
 
 
@@ -90,6 +94,22 @@ class SleeperRolloverTests(unittest.TestCase):
 
 
 class SleeperPlayerTests(unittest.TestCase):
+    def test_nfl_remaining_seconds_matches_sleeper_clock_rules(self):
+        self.assertEqual(
+            nfl_remaining_seconds(
+                {"quarter": "2", "time_remaining": "05:30", "is_over": False}
+            ),
+            2130,
+        )
+        self.assertEqual(nfl_remaining_seconds({"quarter": "HALF"}), 1800)
+        self.assertEqual(nfl_remaining_seconds({"quarter": "F", "is_over": True}), 0)
+        self.assertEqual(nfl_remaining_seconds({}), 3600)
+
+    def test_dynamic_projection_moves_from_original_to_actual(self):
+        self.assertEqual(sleeper_dynamic_projection(10, 20, 3600), 20)
+        self.assertEqual(sleeper_dynamic_projection(10, 20, 0), 10)
+        self.assertEqual(sleeper_dynamic_projection(10, 20, 1800), 17.5)
+
     def test_invalid_probability_preserves_snapshot_and_defense(self):
         data = {
             "week": 1,
