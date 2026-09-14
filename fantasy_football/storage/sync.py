@@ -23,12 +23,12 @@ def sync_parquet_prefix(
     provider: str,
     league_id: str | int,
     season: int,
-    matchup_period: int,
+    matchup_period: int | None,
     output_dir: str | Path,
     tables: Sequence[str] | None = None,
     progress: Callable[[str, int, int | None], None] | None = None,
 ) -> int:
-    """Download only new selected Parquet objects into a local cache."""
+    """Download selected Parquet objects into a local cache incrementally."""
     from google.cloud import storage
 
     selected_tables = set(tables or PARQUET_TABLES)
@@ -36,7 +36,11 @@ def sync_parquet_prefix(
     if unknown_tables:
         raise ValueError(f"Unknown Parquet table(s): {sorted(unknown_tables)}")
 
-    prefix = partition_prefix(provider, league_id, season, matchup_period)
+    prefix = (
+        partition_prefix(provider, league_id, season, matchup_period)
+        if matchup_period is not None
+        else f"provider={provider}/league={league_id}/season={season}/"
+    )
     root = Path(output_dir)
     downloaded = 0
     skipped = 0
@@ -47,8 +51,19 @@ def sync_parquet_prefix(
     client = storage.Client()
     for blob in client.bucket(bucket_name).list_blobs(prefix=prefix):
         relative = blob.name[len(prefix) :]
-        table = relative.split("/", maxsplit=1)[0]
-        if table not in selected_tables or not relative.startswith(f"{table}/"):
+        parts = relative.split("/")
+        if matchup_period is None:
+            if len(parts) < 3 or not parts[0].startswith("week="):
+                ignored += 1
+                continue
+            table = parts[1]
+            table_relative = "/".join(parts[1:])
+        else:
+            table = parts[0]
+            table_relative = relative
+        if table not in selected_tables or not table_relative.startswith(
+            f"{table}/"
+        ):
             ignored += 1
             continue
         destination = root / blob.name
@@ -60,7 +75,7 @@ def sync_parquet_prefix(
         # Snapshot object names carry the capture time, not the upload time.
         if table == "team_snapshots":
             try:
-                stamp = int(Path(relative).stem.removeprefix("timestamp="))
+                stamp = int(Path(blob.name).stem.removeprefix("timestamp="))
                 latest = max(latest or stamp, stamp)
             except ValueError:
                 pass

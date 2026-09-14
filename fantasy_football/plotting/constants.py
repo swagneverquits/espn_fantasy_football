@@ -24,6 +24,8 @@ TEAM_FONT = FontProperties(
     ],
     weight="semibold" if _HAS_SEMIBOLD else "bold",
 )
+ENDPOINT_VALUE_FONTSIZE = 14
+ENDPOINT_VALUE_FONT = TEAM_FONT
 
 # Figure typography
 DEFAULT_GAME_DAYS = ("Thursday", "Sunday", "Monday")

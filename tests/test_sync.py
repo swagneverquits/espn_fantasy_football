@@ -51,3 +51,27 @@ class SyncRecoveryTests(unittest.TestCase):
             self.assertEqual(sync_parquet_prefix("test", **kwargs), 0)
             blob.download_to_filename.assert_not_called()
             progress.assert_called_with("Synced", 0, 1)
+
+    def test_omitting_week_syncs_nested_season_weeks(self):
+        prefix = "provider=espn/league=123/season=2026/week=2/"
+        blob = Mock(name="blob")
+        blob.name = prefix + "team_snapshots/timestamp=2.pq"
+        blob.size = 8
+        blob.download_to_filename.side_effect = lambda path: Path(path).write_bytes(
+            b"complete"
+        )
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch("google.cloud.storage.Client") as client,
+        ):
+            client.return_value.bucket.return_value.list_blobs.return_value = [blob]
+            count = sync_parquet_prefix(
+                "test",
+                provider="espn",
+                league_id="123",
+                season=2026,
+                matchup_period=None,
+                output_dir=directory,
+            )
+            self.assertEqual(count, 1)
+            self.assertEqual(len(list(Path(directory).rglob("*.pq"))), 1)

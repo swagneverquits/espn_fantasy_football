@@ -124,7 +124,7 @@ def _add_analyze_parser(commands: argparse._SubParsersAction) -> None:
 
 def _add_sync_parser(commands: argparse._SubParsersAction) -> None:
     sync = commands.add_parser(
-        "sync", help="Download one or all leagues for a week from GCS."
+        "sync", help="Download one or all leagues from GCS."
     )
     sync.add_argument("--bucket", required=True)
     sync.add_argument(
@@ -138,7 +138,11 @@ def _add_sync_parser(commands: argparse._SubParsersAction) -> None:
         "--all", action="store_true", help="Sync all configured leagues concurrently."
     )
     sync.add_argument("--season", type=int, required=True)
-    sync.add_argument("--week", type=int, required=True)
+    sync.add_argument(
+        "--week",
+        type=int,
+        help="Sync one week; omit to sync every week in the season.",
+    )
     sync.add_argument("--output-dir", type=Path, default=PARQUET_DIR)
     sync.add_argument("--tables", nargs="+", choices=PARQUET_TABLES)
 

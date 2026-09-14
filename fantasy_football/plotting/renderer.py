@@ -7,6 +7,7 @@ import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.collections import LineCollection
 from matplotlib.lines import Line2D
 from matplotlib.offsetbox import (
     AnchoredOffsetbox,
@@ -33,6 +34,8 @@ from .constants import (
     TEAM_COLORS,
     TEAM_FILL_COLORS,
     TEAM_FONT,
+    ENDPOINT_VALUE_FONT,
+    ENDPOINT_VALUE_FONTSIZE,
     WIN_CHANCE_COL,
 )
 from .timeline import compressed_timeline, game_windows
@@ -41,24 +44,60 @@ from .swings import probability_swings
 
 def _asymmetric_probability_scale(
     probabilities: pd.Series,
-) -> tuple[float, float, tuple[float, ...], tuple[str, ...]]:
-    """Return independent tug-of-war extents and favorite-probability ticks."""
+    *,
+    plot_width_pixels: float,
+) -> tuple[float, float, tuple[float, ...], tuple[str, ...], tuple[float, ...]]:
+    """Return independent extents plus adaptive labels and 5-point grid ticks."""
     valid = pd.to_numeric(probabilities, errors="coerce")
     valid = valid[valid.between(0, 1)]
     display_edge = 50 - valid * 100
     left_required = max(float(-display_edge.min()), 0.0) if not valid.empty else 0.0
     right_required = max(float(display_edge.max()), 0.0) if not valid.empty else 0.0
     buffer = 2.5
-    left_extent = max(2.5, math.ceil((left_required + buffer) / 2.5) * 2.5)
-    right_extent = max(2.5, math.ceil((right_required + buffer) / 2.5) * 2.5)
-    negative_ticks = tuple(np.arange(-math.floor(left_extent / 5) * 5, 0, 5.0))
-    positive_ticks = tuple(np.arange(5.0, math.floor(right_extent / 5) * 5 + 5, 5.0))
-    ticks = negative_ticks + (0.0,) + positive_ticks
+    left_extent = max(
+        2.5, math.ceil(round((left_required + buffer) / 2.5, 10)) * 2.5
+    )
+    right_extent = max(
+        2.5, math.ceil(round((right_required + buffer) / 2.5, 10)) * 2.5
+    )
+    left_extent = min(left_extent, 50.0)
+    right_extent = min(right_extent, 50.0)
+    pixels_per_point = plot_width_pixels / (left_extent + right_extent)
+    label_interval = next(
+        (
+            interval
+            for interval in (5.0, 10.0, 20.0, 25.0)
+            if pixels_per_point * interval >= 60
+        ),
+        25.0,
+    )
+    negative_ticks = list(
+        -value
+        for value in np.arange(label_interval, left_extent + 0.001, label_interval)
+    )
+    positive_ticks = list(
+        value
+        for value in np.arange(label_interval, right_extent + 0.001, label_interval)
+    )
+    if np.isclose(left_extent, 50.0):
+        negative_ticks.append(-50.0)
+    if np.isclose(right_extent, 50.0):
+        positive_ticks.append(50.0)
+    ticks = tuple(sorted(set(negative_ticks + [0.0] + positive_ticks)))
     labels = tuple("EVEN" if tick == 0 else f"{50 + abs(tick):g}%" for tick in ticks)
+    grid_ticks = tuple(
+        sorted(
+            {
+                *np.arange(-5.0, -left_extent - 0.001, -5.0),
+                0.0,
+                *np.arange(5.0, right_extent + 0.001, 5.0),
+            }
+        )
+    )
     even_fraction = left_extent / (left_extent + right_extent)
     if left_extent != right_extent:
         assert even_fraction != 0.5
-    return left_extent, right_extent, ticks, labels
+    return left_extent, right_extent, ticks, labels, grid_ticks
 
 
 def _crop_unused_bottom(fig, *, dpi: int, padding_pixels: int = 40) -> None:
@@ -109,22 +148,22 @@ def _plot_colored_probability_path(ax, edge, time_values) -> None:
     """Draw the probability path in team color, splitting crossings at Even."""
     edge = np.asarray(edge, dtype=float)
     time_values = np.asarray(time_values, dtype=float)
+    segments = []
+    colors = []
     for x0, x1, y0, y1 in zip(edge[:-1], edge[1:], time_values[:-1], time_values[1:]):
         if x0 * x1 < 0:
             crossing_y = y0 + (y1 - y0) * (-x0 / (x1 - x0))
-            ax.plot(
-                [x0, 0],
-                [y0, crossing_y],
-                color=TEAM_COLORS[0] if x0 < 0 else TEAM_COLORS[1],
-                lw=1.8,
-                zorder=2.5,
+            segments.extend(
+                (
+                    [(x0, y0), (0, crossing_y)],
+                    [(0, crossing_y), (x1, y1)],
+                )
             )
-            ax.plot(
-                [0, x1],
-                [crossing_y, y1],
-                color=TEAM_COLORS[0] if x1 < 0 else TEAM_COLORS[1],
-                lw=1.8,
-                zorder=2.5,
+            colors.extend(
+                (
+                    TEAM_COLORS[0] if x0 < 0 else TEAM_COLORS[1],
+                    TEAM_COLORS[0] if x1 < 0 else TEAM_COLORS[1],
+                )
             )
             continue
         color = TEAM_COLORS[0] if (x0 < 0 or x1 < 0) else TEAM_COLORS[1]
@@ -132,7 +171,17 @@ def _plot_colored_probability_path(ax, edge, time_values) -> None:
             color = "#666666"
         elif x0 == 0 or x1 == 0:
             color = TEAM_COLORS[0] if (x0 + x1) < 0 else TEAM_COLORS[1]
-        ax.plot([x0, x1], [y0, y1], color=color, lw=1.8, zorder=2.5)
+        segments.append([(x0, y0), (x1, y1)])
+        colors.append(color)
+    if segments:
+        ax.add_collection(
+            LineCollection(
+                segments,
+                colors=colors,
+                linewidths=1.8,
+                zorder=2.5,
+            )
+        )
 
 
 def _team_record(frame: pd.DataFrame) -> str:
@@ -158,7 +207,7 @@ def plot_matchup(
     season: int | None = None,
     tag_swings: float | None = None,
 ) -> Path:
-    """Render a phone-oriented 1080x1350 matchup PNG."""
+    """Render a phone-oriented 1000x1500 matchup PNG."""
     data = matchup_df.copy()
     times = data[TIMESTAMP_COL]
     data[TIMESTAMP_COL] = pd.to_datetime(
@@ -179,9 +228,6 @@ def plot_matchup(
         active |= data[TIMESTAMP_COL].between(window_start, window_end)
     data = data.loc[active].copy()
     frames = [data[data[TEAM_ID_COL].eq(team)] for team in ids]
-    left_extent, right_extent, ticks, labels = _asymmetric_probability_scale(
-        frames[0][WIN_CHANCE_COL]
-    )
     start, end = data[TIMESTAMP_COL].min(), data[TIMESTAMP_COL].max()
     timeline, map_time, timeline_end = compressed_timeline(windows)
     lower, upper = 0.0, timeline_end
@@ -190,10 +236,12 @@ def plot_matchup(
     ]
     current_gap = max(max(durations, default=1 / 24) * 0.12, 0.15 / 24)
     current_timeline_end = sum(durations) + current_gap * max(len(durations) - 1, 0)
-    figure_height = 10 * timeline_end / current_timeline_end * 1.2
+    figure_height = 10 * timeline_end / current_timeline_end * 1.32
 
     with plt.rc_context({"font.family": "Segoe UI"}):
-        fig = plt.figure(figsize=(8, figure_height), dpi=135, facecolor="#f5f5f5")
+        fig = plt.figure(
+            figsize=(1000 / 135, figure_height), dpi=135, facecolor="#f5f5f5"
+        )
         fig.add_artist(
             FancyBboxPatch(
                 (0.015, 0.012),
@@ -308,13 +356,24 @@ def plot_matchup(
         time_axis_x = (
             probability_ax.get_position().x1 + points_ax.get_position().x0
         ) / 2
+        (
+            left_extent,
+            right_extent,
+            ticks,
+            labels,
+            grid_ticks,
+        ) = _asymmetric_probability_scale(
+            frames[0][WIN_CHANCE_COL],
+            plot_width_pixels=probability_ax.get_window_extent().width,
+        )
 
         # Both charts use identical elapsed-time coordinates, including overnight gaps.
         hour_locator = mdates.HourLocator(interval=1, tz="America/New_York")
         grid_hours = []
         label_hours = []
         label_texts = []
-        for raw_start, raw_end, _, _ in timeline:
+        label_window_indices = []
+        for window_index, (raw_start, raw_end, _, _) in enumerate(timeline):
             raw_hours = hour_locator.tick_values(
                 mdates.num2date(raw_start, tz="America/New_York"),
                 mdates.num2date(raw_end, tz="America/New_York"),
@@ -329,8 +388,12 @@ def plot_matchup(
                 .lstrip("0")
                 for value in labeled_raw_hours
             )
+            label_window_indices.extend([window_index] * len(labeled_raw_hours))
+        # Keep the top tick labels close to the first gridline while preserving
+        # the shared timeline geometry in both panels.
+        top_timeline_margin = timeline_end * 0.005
         for ax in (probability_ax, points_ax):
-            ax.set_ylim(upper + timeline_end * 0.04, lower - timeline_end * 0.01)
+            ax.set_ylim(upper + top_timeline_margin, lower - timeline_end * 0.01)
             ax.spines[:].set_visible(False)
             ax.yaxis.set_major_locator(FixedLocator(label_hours))
             ax.yaxis.set_minor_locator(FixedLocator(grid_hours))
@@ -339,7 +402,12 @@ def plot_matchup(
             ax.tick_params(axis="both", which="both", length=0, labelsize=12, pad=6)
             ax.tick_params(axis="y", labelleft=False, labelright=False)
             ax.set_axisbelow(True)
-            ax.tick_params(axis="x", labeltop=True, labelbottom=False)
+            ax.tick_params(
+                axis="x",
+                labeltop=True,
+                labelbottom=False,
+                pad=-6,
+            )
         probability_ax.set_xlim(-left_extent, right_extent)
         probability_ax.set_xticks(ticks, labels)
         even_label = next(
@@ -349,11 +417,7 @@ def plot_matchup(
         )
         even_label.set_fontweight("medium")
         even_label.set_color("#555555")
-        minor_ticks = tuple(
-            value
-            for value in np.arange(-left_extent, right_extent + 1.25, 2.5)
-            if value not in ticks and value != 0
-        )
+        minor_ticks = tuple(value for value in grid_ticks if value not in ticks)
         probability_ax.set_xticks(minor_ticks, minor=True)
         # Rotate the existing paths; do not join observations across collection outages.
         for first, last in windows:
@@ -450,37 +514,90 @@ def plot_matchup(
                         lw=0.85,
                         zorder=0.8,
                     )
+                    for boundary in (
+                        -50.0 if np.isclose(left_extent, 50.0) else None,
+                        50.0 if np.isclose(right_extent, 50.0) else None,
+                    ):
+                        if boundary is not None:
+                            ax.vlines(
+                                boundary,
+                                mapped_start,
+                                mapped_end,
+                                color="#999999",
+                                lw=0.7,
+                                zorder=0.75,
+                            )
 
         # Render one shared clock/date axis in the gutter between the plots.
         def figure_y(display_time):
             display_point = probability_ax.transData.transform((0, display_time))
             return fig.transFigure.inverted().transform(display_point)[1]
 
-        for display_time, label in zip(label_hours, label_texts):
-            fig.text(
-                time_axis_x,
-                figure_y(display_time),
-                label,
-                fontsize=12,
-                ha="center",
-                va="center",
-                color="#222222",
+        clock_artists = []
+        for display_time, label, window_index in zip(
+            label_hours, label_texts, label_window_indices
+        ):
+            clock_artists.append(
+                (
+                    window_index,
+                    fig.text(
+                        time_axis_x,
+                        figure_y(display_time),
+                        label,
+                        fontsize=12,
+                        ha="center",
+                        va="center",
+                        color="#222222",
+                    ),
+                )
             )
-        for raw_start, _, mapped_start, mapped_end in timeline:
+        date_artists = []
+        for window_index, (raw_start, _, mapped_start, mapped_end) in enumerate(
+            timeline
+        ):
             day = mdates.num2date(raw_start, tz="America/New_York")
             date_position = mapped_start + min(
                 (mapped_end - mapped_start) * 0.12, 0.2 / 24
             )
-            fig.text(
-                time_axis_x,
-                figure_y(date_position),
-                f"{day.strftime('%a')}.\n{day.month}/{day.day}",
-                fontsize=12.5,
-                fontweight="medium",
-                color="#555555",
-                ha="center",
-                va="center",
+            date_artists.append(
+                (
+                    window_index,
+                    fig.text(
+                        time_axis_x,
+                        figure_y(date_position),
+                        f"{day.strftime('%a').upper()} · {day.month}/{day.day}",
+                        fontsize=12,
+                        fontweight="medium",
+                        color="#555555",
+                        ha="center",
+                        va="center",
+                    ),
+                )
             )
+
+        # Date headers own the window start; suppress only colliding clock text.
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        safety_pixels = 6
+        for window_index, date_artist in date_artists:
+            date_box = date_artist.get_window_extent(renderer)
+            date_box = (
+                date_box.x0,
+                date_box.y0 - safety_pixels,
+                date_box.x1,
+                date_box.y1 + safety_pixels,
+            )
+            for clock_window_index, clock_artist in clock_artists:
+                if clock_window_index != window_index:
+                    continue
+                clock_box = clock_artist.get_window_extent(renderer)
+                if (
+                    clock_box.x0 < date_box[2]
+                    and clock_box.x1 > date_box[0]
+                    and clock_box.y0 < date_box[3]
+                    and clock_box.y1 > date_box[1]
+                ):
+                    clock_artist.remove()
         valid = frames[0][frames[0][WIN_CHANCE_COL].between(0, 1)]
         if not valid.empty:
             row = valid.iloc[-1]
@@ -503,13 +620,30 @@ def plot_matchup(
             probability_ax.annotate(
                 f"{50 + abs(edge):.0f}%",
                 (edge, point_time),
-                xytext=(-8 if edge < 0 else 8, 0),
+                xytext=(
+                    8
+                    if edge <= -50
+                    else -8
+                    if edge >= 50
+                    else -8
+                    if edge < 0
+                    else 8,
+                    0,
+                ),
                 textcoords="offset points",
-                ha="right" if edge < 0 else "left",
+                ha=(
+                    "left"
+                    if edge <= -50
+                    else "right"
+                    if edge >= 50
+                    else "right"
+                    if edge < 0
+                    else "left"
+                ),
                 va="center",
                 color=color,
-                fontsize=14,
-                fontweight="bold",
+                fontproperties=ENDPOINT_VALUE_FONT,
+                fontsize=ENDPOINT_VALUE_FONTSIZE,
                 annotation_clip=False,
             )
         # Latest actual points stay primary; projections are secondary below them.
@@ -550,8 +684,8 @@ def plot_matchup(
                         score_text,
                         textprops={
                             "color": color,
-                            "fontproperties": TEAM_FONT,
-                            "fontsize": 14,
+                            "fontproperties": ENDPOINT_VALUE_FONT,
+                            "fontsize": ENDPOINT_VALUE_FONTSIZE,
                         },
                     ),
                     TextArea(
@@ -582,7 +716,8 @@ def plot_matchup(
             points_ax.add_artist(artist)
             return artist
 
-        # Both labels start on the right; only a rendered collision flips Team 1.
+        # Both labels start on the right. If they collide, put the lower score
+        # on the left and the higher score on the right; ties use team order.
         labels = [add_endpoint_label(spec, True) for spec in endpoint_specs]
         if len(labels) == 2:
             fig.canvas.draw()
@@ -592,8 +727,21 @@ def plot_matchup(
                 .get_window_extent(renderer)
                 .overlaps(labels[1].get_window_extent(renderer))
             ):
+                first_score = endpoint_specs[0][0]
+                second_score = endpoint_specs[1][0]
+                if first_score <= second_score:
+                    left_index, right_index = 0, 1
+                else:
+                    left_index, right_index = 1, 0
                 labels[0].remove()
-                labels[0] = add_endpoint_label(endpoint_specs[0], False)
+                labels[1].remove()
+                labels = [None, None]
+                labels[left_index] = add_endpoint_label(
+                    endpoint_specs[left_index], False
+                )
+                labels[right_index] = add_endpoint_label(
+                    endpoint_specs[right_index], True
+                )
 
         # Keep right-side labels inside the card as an edge-case fallback.
         fig.canvas.draw()
