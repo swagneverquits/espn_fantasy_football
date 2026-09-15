@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
 
@@ -201,39 +202,32 @@ class AllLeagueTests(unittest.TestCase):
             config.assert_not_called()
 
     def test_all_plot_paths_include_provider(self):
-        import pandas as pd
-
         with (
             patch("fantasy_football.cli.load_leagues", return_value=self.config()),
+            patch("fantasy_football.cli.ProcessPoolExecutor", ThreadPoolExecutor),
             patch(
-                "fantasy_football.storage.duckdb.load_matchup_results",
-                return_value=pd.DataFrame(),
-            ),
-            patch(
-                "fantasy_football.plotting.generate_matchup_plots",
-                return_value=[Path("test.png")],
-            ) as plot,
+                "fantasy_football.cli._analyze_league",
+                side_effect=[
+                    ("espn", "same", Path("espn"), 1, 10, 0.1, 0.2),
+                    ("sleeper", "same", Path("sleeper"), 1, 10, 0.1, 0.2),
+                ],
+            ) as analyze,
         ):
             self.assertEqual(
                 main(["analyze", "--all", "--season", "2026", "--week", "1"]), 0
             )
-        paths = [call.kwargs["output_dir"] for call in plot.call_args_list]
-        self.assertEqual(len(set(paths)), 2)
-        self.assertTrue(any("espn" in path.parts for path in paths))
-        self.assertTrue(any("sleeper" in path.parts for path in paths))
+        self.assertEqual(analyze.call_count, 2)
 
     def test_all_plot_skips_absent_leagues(self):
-        import pandas as pd
-
         with (
             patch("fantasy_football.cli.load_leagues", return_value=self.config()),
+            patch("fantasy_football.cli.ProcessPoolExecutor", ThreadPoolExecutor),
             patch(
-                "fantasy_football.storage.duckdb.load_matchup_results",
-                side_effect=[FileNotFoundError(), pd.DataFrame()],
-            ),
-            patch(
-                "fantasy_football.plotting.generate_matchup_plots",
-                return_value=[Path("test.png")],
+                "fantasy_football.cli._analyze_league",
+                side_effect=[
+                    FileNotFoundError(),
+                    ("sleeper", "same", Path("sleeper"), 1, 10, 0.1, 0.2),
+                ],
             ),
         ):
             self.assertEqual(

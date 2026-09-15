@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import tempfile
 from collections.abc import Callable, Sequence
+from concurrent.futures import Executor, as_completed
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -27,6 +28,7 @@ def sync_parquet_prefix(
     output_dir: str | Path,
     tables: Sequence[str] | None = None,
     progress: Callable[[str, int, int | None], None] | None = None,
+    download_executor: Executor | None = None,
 ) -> int:
     """Download selected Parquet objects into a local cache incrementally."""
     from google.cloud import storage
@@ -46,6 +48,7 @@ def sync_parquet_prefix(
     skipped = 0
     ignored = 0
     latest = None
+    pending = []
     if progress:
         progress("Syncing", downloaded, latest)
     client = storage.Client()
@@ -70,8 +73,7 @@ def sync_parquet_prefix(
         if destination.exists() and destination.stat().st_size == blob.size:
             skipped += 1
         else:
-            _download(blob, destination)
-            downloaded += 1
+            pending.append((blob, destination))
         # Snapshot object names carry the capture time, not the upload time.
         if table == "team_snapshots":
             try:
@@ -79,8 +81,22 @@ def sync_parquet_prefix(
                 latest = max(latest or stamp, stamp)
             except ValueError:
                 pass
-        if progress:
-            progress("Syncing", downloaded, latest)
+    if download_executor is None:
+        for blob, destination in pending:
+            _download(blob, destination)
+            downloaded += 1
+            if progress:
+                progress("Syncing", downloaded, latest)
+    else:
+        futures = {
+            download_executor.submit(_download, blob, destination): blob
+            for blob, destination in pending
+        }
+        for future in as_completed(futures):
+            future.result()
+            downloaded += 1
+            if progress:
+                progress("Syncing", downloaded, latest)
 
     if progress:
         progress("Synced", downloaded, latest)

@@ -3,6 +3,8 @@
 import argparse
 import logging
 import os
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from time import perf_counter
 from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -187,6 +189,45 @@ def _all_leagues(args: argparse.Namespace) -> list[tuple[str, str, str]]:
     return targets
 
 
+def _analyze_league(
+    target: tuple[str, str, str],
+    *,
+    season: int,
+    week: int | str,
+    include_provider: bool,
+    tag_swings: float | None,
+) -> tuple[str, str, Path, int, int, float, float]:
+    """Load and render one league; this is the process-pool boundary."""
+    from fantasy_football.plotting import generate_matchup_plots
+    from fantasy_football.storage.duckdb import load_matchup_results
+
+    provider, name, league_id = target
+    load_started = perf_counter()
+    data = load_matchup_results(
+        PARQUET_DIR,
+        provider=provider,
+        league_id=league_id,
+        season=season,
+        matchup_period=week,
+    )
+    load_seconds = perf_counter() - load_started
+    output = PLOTS_DIR / str(season)
+    if include_provider:
+        output = output / provider
+    output = output / name / f"week_{week}"
+    plot_started = perf_counter()
+    paths = generate_matchup_plots(
+        data,
+        week=week,
+        season=season,
+        output_dir=output,
+        league_name=name,
+        tag_swings=tag_swings,
+    )
+    render_seconds = perf_counter() - plot_started
+    return provider, name, output, len(paths), len(data), load_seconds, render_seconds
+
+
 def _sync(args: argparse.Namespace) -> int:
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -204,8 +245,15 @@ def _sync(args: argparse.Namespace) -> int:
     failed = False
     total = 0
     # Each league has a separate destination prefix and its own GCS client.
+    download_workers = min(16, max(4, len(targets) * 4))
+    logging.info(
+        "Sync parallelizing %d league coordinators across %d download workers",
+        len(targets),
+        download_workers,
+    )
     with (
         SyncDisplay(targets) as display,
+        ThreadPoolExecutor(max_workers=download_workers) as download_pool,
         ThreadPoolExecutor(max_workers=min(8, len(targets))) as pool,
     ):
         futures = {
@@ -218,6 +266,7 @@ def _sync(args: argparse.Namespace) -> int:
                 matchup_period=args.week,
                 output_dir=args.output_dir,
                 tables=args.tables,
+                download_executor=download_pool,
                 **(
                     {
                         "progress": lambda status, count, latest, p=provider, i=league_id: display.update(
@@ -248,8 +297,7 @@ def _sync(args: argparse.Namespace) -> int:
 
 
 def _analyze(args: argparse.Namespace) -> int:
-    from fantasy_football.plotting import generate_matchup_plots
-    from fantasy_football.storage.duckdb import load_matchup_results
+    from fantasy_football.terminal.analyze import AnalyzeDisplay
 
     if args.all:
         targets = _all_leagues(args)
@@ -259,42 +307,107 @@ def _analyze(args: argparse.Namespace) -> int:
         targets = [(provider, args.league, league_id)]
     failed = False
     plotted = 0
-    # Matplotlib has shared state, so rendering stays sequential.
-    for provider, name, league_id in targets:
-        try:
-            data = load_matchup_results(
-                PARQUET_DIR,
-                provider=provider,
-                league_id=league_id,
-                season=args.season,
-                matchup_period=args.week,
+    analysis_started = perf_counter()
+    outputs: list[Path] = []
+
+    with AnalyzeDisplay(targets) as display:
+
+        def handle_result(
+            result: tuple[str, str, Path, int, int, float, float]
+        ) -> None:
+            nonlocal plotted
+            (
+                provider,
+                name,
+                output,
+                count,
+                row_count,
+                load_seconds,
+                render_seconds,
+            ) = result
+            logging.info(
+                "Analyze %s/%s week=%s loaded rows=%d in %.2fs; rendered plots=%d in %.2fs",
+                provider,
+                name,
+                args.week,
+                row_count,
+                load_seconds,
+                count,
+                render_seconds,
             )
-            output = PLOTS_DIR / str(args.season)
-            if args.all:
-                output = output / provider
-            output = output / name / f"week_{args.week}"
-            paths = generate_matchup_plots(
-                data,
-                week=args.week,
-                season=args.season,
-                output_dir=output,
-                league_name=name,
-                tag_swings=args.tag_swings,
+            display.update(
+                provider,
+                targets_by_key[(provider, name)],
+                "Complete",
+                rows=row_count,
+                load_seconds=load_seconds,
+                plots=count,
+                render_seconds=render_seconds,
             )
-            for path in paths:
-                print(path)
-            plotted += len(paths)
-        except FileNotFoundError:
-            if not args.all:
+            outputs.append(output)
+            plotted += count
+
+        targets_by_key = {(provider, name): league_id for provider, name, league_id in targets}
+
+        if len(targets) == 1:
+            try:
+                handle_result(
+                    _analyze_league(
+                        targets[0],
+                        season=args.season,
+                        week=args.week,
+                        include_provider=args.all,
+                        tag_swings=args.tag_swings,
+                    )
+                )
+            except FileNotFoundError:
                 raise
-            logging.warning("No local snapshots for %s/%s; skipping", provider, name)
-        except Exception:
-            if not args.all:
+            except Exception:
                 raise
-            failed = True
-            logging.exception("Plotting failed: %s/%s", provider, name)
+        else:
+            max_workers = min(4, len(targets))
+            logging.info(
+                "Analyze parallelizing %d leagues across %d workers",
+                len(targets),
+                max_workers,
+            )
+            with ProcessPoolExecutor(max_workers=max_workers) as pool:
+                futures = {
+                    pool.submit(
+                        _analyze_league,
+                        target,
+                        season=args.season,
+                        week=args.week,
+                        include_provider=args.all,
+                        tag_swings=args.tag_swings,
+                    ): target
+                    for target in targets
+                }
+                for future in as_completed(futures):
+                    provider, name, league_id = futures[future]
+                    try:
+                        handle_result(future.result())
+                    except FileNotFoundError:
+                        display.update(provider, league_id, "Skipped")
+                        logging.warning(
+                            "No local snapshots for %s/%s; skipping", provider, name
+                        )
+                    except Exception:
+                        failed = True
+                        display.update(provider, league_id, "Failed")
+                        logging.exception("Plotting failed: %s/%s", provider, name)
+    if display.enabled:
+        display.console.print(display.final_table())
+    for output in outputs:
+        print(output)
     if not plotted:
         logging.warning("No plots generated for the selected leagues")
+    logging.info(
+        "Analyze complete: plots=%d leagues=%d elapsed=%.2fs",
+        plotted,
+        len(targets),
+        perf_counter() - analysis_started,
+    )
     return int(failed or not plotted)
 
 

@@ -3,6 +3,9 @@
 import math
 from pathlib import Path
 
+import matplotlib
+
+matplotlib.use("Agg")
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import numpy as np
@@ -47,7 +50,7 @@ def _asymmetric_probability_scale(
     *,
     plot_width_pixels: float,
 ) -> tuple[float, float, tuple[float, ...], tuple[str, ...], tuple[float, ...]]:
-    """Return independent extents plus adaptive labels and 5-point grid ticks."""
+    """Return independent extents, uniform-cadence labels, and 5-point grids."""
     valid = pd.to_numeric(probabilities, errors="coerce")
     valid = valid[valid.between(0, 1)]
     display_edge = 50 - valid * 100
@@ -66,7 +69,7 @@ def _asymmetric_probability_scale(
     label_interval = next(
         (
             interval
-            for interval in (5.0, 10.0, 20.0, 25.0)
+            for interval in (5.0, 10.0, 25.0)
             if pixels_per_point * interval >= 60
         ),
         25.0,
@@ -79,10 +82,6 @@ def _asymmetric_probability_scale(
         value
         for value in np.arange(label_interval, right_extent + 0.001, label_interval)
     )
-    if np.isclose(left_extent, 50.0):
-        negative_ticks.append(-50.0)
-    if np.isclose(right_extent, 50.0):
-        positive_ticks.append(50.0)
     ticks = tuple(sorted(set(negative_ticks + [0.0] + positive_ticks)))
     labels = tuple("EVEN" if tick == 0 else f"{50 + abs(tick):g}%" for tick in ticks)
     grid_ticks = tuple(
@@ -476,57 +475,76 @@ def plot_matchup(
         points_ax.set_xlim(0, max(1, float(actual.max()) * 1.22) if len(actual) else 1)
         # Draw both grid directions only inside active windows; the compressed
         # interval between segments remains completely blank in both panels.
+        window_grid_positions = []
+        for raw_start, raw_end, mapped_start, mapped_end in timeline:
+            window_hours = hour_locator.tick_values(
+                mdates.num2date(raw_start, tz="America/New_York"),
+                mdates.num2date(raw_end, tz="America/New_York"),
+            )
+            window_hours = window_hours[
+                (window_hours >= raw_start) & (window_hours <= raw_end)
+            ]
+            window_grid_positions.append(
+                (mapped_start, mapped_end, map_time(window_hours))
+            )
+
         for ax in (probability_ax, points_ax):
-            for raw_start, raw_end, mapped_start, mapped_end in timeline:
-                window_hours = hour_locator.tick_values(
-                    mdates.num2date(raw_start, tz="America/New_York"),
-                    mdates.num2date(raw_end, tz="America/New_York"),
-                )
-                window_hours = window_hours[
-                    (window_hours >= raw_start) & (window_hours <= raw_end)
-                ]
-                for y in map_time(window_hours):
-                    ax.hlines(
-                        y,
-                        *ax.get_xlim(),
-                        color="#dddddd",
-                        lw=0.5,
-                        zorder=0.5,
-                    )
+            x_min, x_max = ax.get_xlim()
+            horizontal_segments = []
+            vertical_segments = []
+            reference_segments = []
+            for mapped_start, mapped_end, display_hours in window_grid_positions:
+                for y in display_hours:
+                    horizontal_segments.append(((x_min, y), (x_max, y)))
                 x_grid = ax.get_xticks()
                 if ax is probability_ax:
                     x_grid = np.concatenate((x_grid, ax.get_xticks(minor=True)))
                 for x in x_grid:
-                    ax.vlines(
-                        x,
-                        mapped_start,
-                        mapped_end,
-                        color="#dddddd",
-                        lw=0.5,
-                        zorder=0.5,
+                    vertical_segments.append(
+                        ((x, mapped_start), (x, mapped_end))
                     )
                 if ax is probability_ax:
-                    ax.vlines(
-                        0,
-                        mapped_start,
-                        mapped_end,
-                        color="#b0b0b0",
-                        lw=0.85,
-                        zorder=0.8,
+                    reference_segments.append(
+                        ((0, mapped_start), (0, mapped_end))
                     )
                     for boundary in (
                         -50.0 if np.isclose(left_extent, 50.0) else None,
                         50.0 if np.isclose(right_extent, 50.0) else None,
                     ):
                         if boundary is not None:
-                            ax.vlines(
-                                boundary,
-                                mapped_start,
-                                mapped_end,
-                                color="#999999",
-                                lw=0.7,
-                                zorder=0.75,
+                            reference_segments.append(
+                                (
+                                    (boundary, mapped_start),
+                                    (boundary, mapped_end),
+                                )
                             )
+            ax.add_collection(
+                LineCollection(
+                    horizontal_segments,
+                    colors="#dddddd",
+                    linewidths=0.5,
+                    zorder=0.5,
+                )
+            )
+            ax.add_collection(
+                LineCollection(
+                    vertical_segments,
+                    colors="#dddddd",
+                    linewidths=0.5,
+                    zorder=0.5,
+                )
+            )
+            if reference_segments:
+                ax.add_collection(
+                    LineCollection(
+                        reference_segments,
+                        colors=["#b0b0b0"]
+                        + ["#999999"] * (len(reference_segments) - 1),
+                        linewidths=[0.85]
+                        + [0.7] * (len(reference_segments) - 1),
+                        zorder=0.8,
+                    )
+                )
 
         # Render one shared clock/date axis in the gutter between the plots.
         def figure_y(display_time):
@@ -719,9 +737,9 @@ def plot_matchup(
         # Both labels start on the right. If they collide, put the lower score
         # on the left and the higher score on the right; ties use team order.
         labels = [add_endpoint_label(spec, True) for spec in endpoint_specs]
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
         if len(labels) == 2:
-            fig.canvas.draw()
-            renderer = fig.canvas.get_renderer()
             if (
                 labels[0]
                 .get_window_extent(renderer)
@@ -742,10 +760,12 @@ def plot_matchup(
                 labels[right_index] = add_endpoint_label(
                     endpoint_specs[right_index], True
                 )
+                fig.canvas.draw()
+                renderer = fig.canvas.get_renderer()
 
-        # Keep right-side labels inside the card as an edge-case fallback.
-        fig.canvas.draw()
-        renderer = fig.canvas.get_renderer()
+        # Keep right-side labels inside the card as an edge-case fallback. The
+        # collision check above has already drawn the canvas when possible;
+        # the crop pass below provides the final draw after any fallback.
         card_right = fig.bbox.x1 - 2
         for index, artist in enumerate(labels):
             if artist.get_window_extent(renderer).x1 > card_right:

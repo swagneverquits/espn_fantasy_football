@@ -29,6 +29,43 @@ class PlottingTests(unittest.TestCase):
         self.assertIn("100%", wide[3])
         self.assertEqual(narrow[4], (-5.0, 0.0, 5.0))
 
+    def test_probability_labels_show_only_outer_and_midpoint_values(self):
+        _, _, ticks, labels, _ = _asymmetric_probability_scale(
+            pd.Series([0.40, 0.55]), plot_width_pixels=600
+        )
+        self.assertEqual(ticks, (-5.0, 0.0, 5.0, 10.0))
+        self.assertEqual(labels, ("55%", "EVEN", "55%", "60%"))
+
+        _, _, ticks, labels, _ = _asymmetric_probability_scale(
+            pd.Series([0.40, 0.00]), plot_width_pixels=600
+        )
+        self.assertEqual(ticks, (0.0, 10.0, 20.0, 30.0, 40.0, 50.0))
+        self.assertEqual(
+            labels, ("EVEN", "60%", "70%", "80%", "90%", "100%")
+        )
+
+    def test_probability_labels_remain_independent_for_asymmetric_extents(self):
+        _, _, ticks, labels, _ = _asymmetric_probability_scale(
+            pd.Series([0.55, 0.25]), plot_width_pixels=600
+        )
+        self.assertEqual(
+            ticks, (-5.0, 0.0, 5.0, 10.0, 15.0, 20.0, 25.0)
+        )
+        self.assertEqual(
+            labels, ("55%", "EVEN", "55%", "60%", "65%", "70%", "75%")
+        )
+
+    def test_probability_labels_use_one_cadence_on_both_sides(self):
+        _, _, ticks, labels, _ = _asymmetric_probability_scale(
+            pd.Series([0.0, 0.70]), plot_width_pixels=600
+        )
+        self.assertEqual(
+            ticks, (-20.0, -10.0, 0.0, 10.0, 20.0, 30.0, 40.0, 50.0)
+        )
+        self.assertEqual(
+            labels, ("70%", "60%", "EVEN", "60%", "70%", "80%", "90%", "100%")
+        )
+
     def test_largest_probability_swings_preserves_ties(self):
         frame = pd.DataFrame(
             {
