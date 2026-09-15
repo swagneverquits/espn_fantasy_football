@@ -2,9 +2,9 @@
 
 from matplotlib.font_manager import FontProperties, fontManager
 
-# Foregrounds use a slightly darker amber; probability fills retain their color.
-TEAM_COLORS = ("#b88600", "#5b2a86")
-TEAM_FILL_COLORS = ("#d49a00", "#5b2a86")
+# Shared team palette; fills use these colors with the existing opacity.
+TEAM_COLORS = ("#C58A00", "#60328F")
+TEAM_FILL_COLORS = ("#C58A00", "#60328F")
 _AVAILABLE_FONTS = {font.name for font in fontManager.ttflist}
 _HAS_SEMIBOLD = any(
     font.name == "Segoe UI" and font.weight == 600 and font.style == "normal"

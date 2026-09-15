@@ -11,9 +11,7 @@ from fantasy_football.constants import TIMESTAMP_COL
 logger = logging.getLogger(__name__)
 
 
-def _changed_within_segment(
-    frame: pd.DataFrame, column: str
-) -> bool:
+def _changed_within_segment(frame: pd.DataFrame, column: str) -> bool:
     """Return whether any team's value changes during a timestamp segment."""
     if column not in frame:
         return False
@@ -76,12 +74,15 @@ def game_windows(
     return windows
 
 
-def compressed_timeline(windows):
+def compressed_timeline(windows, *, gap_days: float | None = None):
     """Map active windows to a compact shared vertical coordinate."""
     raw = [(mdates.date2num(start), mdates.date2num(end)) for start, end in windows]
     durations = [end - start for start, end in raw]
-    current_gap = max(max(durations, default=1 / 24) * 0.12, 0.15 / 24)
-    gap = current_gap * 0.25
+    if gap_days is None:
+        current_gap = max(max(durations, default=1 / 24) * 0.12, 0.15 / 24)
+        gap = current_gap * 0.25
+    else:
+        gap = max(float(gap_days), 0.0)
     segments = []
     cursor = 0.0
     for (start, end), duration in zip(raw, durations):

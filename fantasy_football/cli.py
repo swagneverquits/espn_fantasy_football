@@ -125,9 +125,7 @@ def _add_analyze_parser(commands: argparse._SubParsersAction) -> None:
 
 
 def _add_sync_parser(commands: argparse._SubParsersAction) -> None:
-    sync = commands.add_parser(
-        "sync", help="Download one or all leagues from GCS."
-    )
+    sync = commands.add_parser("sync", help="Download one or all leagues from GCS.")
     sync.add_argument("--bucket", required=True)
     sync.add_argument(
         "--provider",
@@ -315,7 +313,7 @@ def _analyze(args: argparse.Namespace) -> int:
     with AnalyzeDisplay(targets) as display:
 
         def handle_result(
-            result: tuple[str, str, Path, int, int, float, float]
+            result: tuple[str, str, Path, int, int, float, float],
         ) -> None:
             nonlocal plotted
             (
@@ -349,7 +347,9 @@ def _analyze(args: argparse.Namespace) -> int:
             outputs.append(output)
             plotted += count
 
-        targets_by_key = {(provider, name): league_id for provider, name, league_id in targets}
+        targets_by_key = {
+            (provider, name): league_id for provider, name, league_id in targets
+        }
 
         if len(targets) == 1:
             try:

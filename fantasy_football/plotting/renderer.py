@@ -44,6 +44,21 @@ from .constants import (
 from .timeline import compressed_timeline, game_windows
 from .swings import probability_swings
 
+PROBABILITY_HARD_BOUNDARY_COLOR = "#999999"
+PROBABILITY_HARD_BOUNDARY_LINEWIDTH = 0.7
+PROBABILITY_HARD_BOUNDARY_ZORDER = 0.75
+
+
+def _probability_hard_boundaries(
+    left_extent: float, right_extent: float
+) -> tuple[float, ...]:
+    """Return the signed x positions of any visible 100% boundaries."""
+    return tuple(
+        boundary
+        for boundary, extent in ((-50.0, left_extent), (50.0, right_extent))
+        if np.isclose(extent, 50.0)
+    )
+
 
 def _asymmetric_probability_scale(
     probabilities: pd.Series,
@@ -57,12 +72,8 @@ def _asymmetric_probability_scale(
     left_required = max(float(-display_edge.min()), 0.0) if not valid.empty else 0.0
     right_required = max(float(display_edge.max()), 0.0) if not valid.empty else 0.0
     buffer = 2.5
-    left_extent = max(
-        2.5, math.ceil(round((left_required + buffer) / 2.5, 10)) * 2.5
-    )
-    right_extent = max(
-        2.5, math.ceil(round((right_required + buffer) / 2.5, 10)) * 2.5
-    )
+    left_extent = max(2.5, math.ceil(round((left_required + buffer) / 2.5, 10)) * 2.5)
+    right_extent = max(2.5, math.ceil(round((right_required + buffer) / 2.5, 10)) * 2.5)
     left_extent = min(left_extent, 50.0)
     right_extent = min(right_extent, 50.0)
     pixels_per_point = plot_width_pixels / (left_extent + right_extent)
@@ -228,14 +239,15 @@ def plot_matchup(
     data = data.loc[active].copy()
     frames = [data[data[TEAM_ID_COL].eq(team)] for team in ids]
     start, end = data[TIMESTAMP_COL].min(), data[TIMESTAMP_COL].max()
-    timeline, map_time, timeline_end = compressed_timeline(windows)
-    lower, upper = 0.0, timeline_end
     durations = [
         mdates.date2num(end) - mdates.date2num(start) for start, end in windows
     ]
+    # Use the existing compressed geometry as a provisional figure-size basis;
+    # the final gap is recalculated below in display pixels.
+    provisional_timeline, _, provisional_end = compressed_timeline(windows)
     current_gap = max(max(durations, default=1 / 24) * 0.12, 0.15 / 24)
     current_timeline_end = sum(durations) + current_gap * max(len(durations) - 1, 0)
-    figure_height = 10 * timeline_end / current_timeline_end * 1.32
+    figure_height = 10 * provisional_end / current_timeline_end * 1.32
 
     with plt.rc_context({"font.family": "Segoe UI"}):
         fig = plt.figure(
@@ -321,6 +333,19 @@ def plot_matchup(
                 probability_position.height,
             ]
         )
+        plot_height_pixels = probability_ax.get_window_extent().height
+        active_duration = sum(durations)
+        gap_count = max(len(windows) - 1, 0)
+        gap_pixels = 9.0
+        gap_days = (
+            gap_pixels * active_duration / (plot_height_pixels - gap_pixels * gap_count)
+            if gap_count and plot_height_pixels > gap_pixels * gap_count
+            else 0.0
+        )
+        timeline, map_time, timeline_end = compressed_timeline(
+            windows, gap_days=gap_days
+        )
+        lower, upper = 0.0, timeline_end
         visualization_left = probability_ax.get_position().x0
         visualization_right = points_ax.get_position().x1
         fig.add_artist(
@@ -339,7 +364,7 @@ def plot_matchup(
             0.885,
             "Win Probability",
             fontsize=13,
-            fontweight="medium",
+            fontweight="semibold",
             color="#4A4A4A",
             ha="center",
         )
@@ -348,7 +373,7 @@ def plot_matchup(
             0.885,
             "Points",
             fontsize=13,
-            fontweight="medium",
+            fontweight="semibold",
             color="#4A4A4A",
             ha="center",
         )
@@ -406,6 +431,7 @@ def plot_matchup(
                 labeltop=True,
                 labelbottom=False,
                 pad=-6,
+                labelcolor="#555555",
             )
         probability_ax.set_xlim(-left_extent, right_extent)
         probability_ax.set_xticks(ticks, labels)
@@ -492,7 +518,8 @@ def plot_matchup(
             x_min, x_max = ax.get_xlim()
             horizontal_segments = []
             vertical_segments = []
-            reference_segments = []
+            even_segments = []
+            boundary_segments = []
             for mapped_start, mapped_end, display_hours in window_grid_positions:
                 for y in display_hours:
                     horizontal_segments.append(((x_min, y), (x_max, y)))
@@ -500,24 +527,18 @@ def plot_matchup(
                 if ax is probability_ax:
                     x_grid = np.concatenate((x_grid, ax.get_xticks(minor=True)))
                 for x in x_grid:
-                    vertical_segments.append(
-                        ((x, mapped_start), (x, mapped_end))
-                    )
+                    vertical_segments.append(((x, mapped_start), (x, mapped_end)))
                 if ax is probability_ax:
-                    reference_segments.append(
-                        ((0, mapped_start), (0, mapped_end))
+                    even_segments.append(((0, mapped_start), (0, mapped_end)))
+                    boundary_segments.extend(
+                        (
+                            (boundary, mapped_start),
+                            (boundary, mapped_end),
+                        )
+                        for boundary in _probability_hard_boundaries(
+                            left_extent, right_extent
+                        )
                     )
-                    for boundary in (
-                        -50.0 if np.isclose(left_extent, 50.0) else None,
-                        50.0 if np.isclose(right_extent, 50.0) else None,
-                    ):
-                        if boundary is not None:
-                            reference_segments.append(
-                                (
-                                    (boundary, mapped_start),
-                                    (boundary, mapped_end),
-                                )
-                            )
             ax.add_collection(
                 LineCollection(
                     horizontal_segments,
@@ -534,15 +555,22 @@ def plot_matchup(
                     zorder=0.5,
                 )
             )
-            if reference_segments:
+            if even_segments:
                 ax.add_collection(
                     LineCollection(
-                        reference_segments,
-                        colors=["#b0b0b0"]
-                        + ["#999999"] * (len(reference_segments) - 1),
-                        linewidths=[0.85]
-                        + [0.7] * (len(reference_segments) - 1),
+                        even_segments,
+                        colors="#b0b0b0",
+                        linewidths=0.85,
                         zorder=0.8,
+                    )
+                )
+            if boundary_segments:
+                ax.add_collection(
+                    LineCollection(
+                        boundary_segments,
+                        colors=PROBABILITY_HARD_BOUNDARY_COLOR,
+                        linewidths=PROBABILITY_HARD_BOUNDARY_LINEWIDTH,
+                        zorder=PROBABILITY_HARD_BOUNDARY_ZORDER,
                     )
                 )
 
@@ -565,7 +593,7 @@ def plot_matchup(
                         fontsize=12,
                         ha="center",
                         va="center",
-                        color="#222222",
+                        color="#555555",
                     ),
                 )
             )
@@ -585,8 +613,8 @@ def plot_matchup(
                         figure_y(date_position),
                         f"{day.strftime('%a').upper()} · {day.month}/{day.day}",
                         fontsize=12,
-                        fontweight="medium",
-                        color="#555555",
+                        fontweight="semibold",
+                        color="#333333",
                         ha="center",
                         va="center",
                     ),
@@ -635,35 +663,35 @@ def plot_matchup(
                 markeredgecolor="white",
                 zorder=5,
             )
-            probability_ax.annotate(
+            probability_label = TextArea(
                 f"{50 + abs(edge):.0f}%",
-                (edge, point_time),
-                xytext=(
-                    8
-                    if edge <= -50
-                    else -8
-                    if edge >= 50
-                    else -8
-                    if edge < 0
-                    else 8,
-                    0,
-                ),
-                textcoords="offset points",
-                ha=(
-                    "left"
-                    if edge <= -50
-                    else "right"
-                    if edge >= 50
-                    else "right"
-                    if edge < 0
-                    else "left"
-                ),
-                va="center",
-                color=color,
-                fontproperties=ENDPOINT_VALUE_FONT,
-                fontsize=ENDPOINT_VALUE_FONTSIZE,
-                annotation_clip=False,
+                textprops={
+                    "color": color,
+                    "fontproperties": ENDPOINT_VALUE_FONT,
+                    "fontsize": ENDPOINT_VALUE_FONTSIZE,
+                },
             )
+            if edge >= 50:
+                probability_offset_x, probability_alignment_x = -8, 1
+            elif edge <= -50:
+                probability_offset_x, probability_alignment_x = 8, 0
+            elif edge >= 0:
+                probability_offset_x, probability_alignment_x = 8, 0
+            else:
+                probability_offset_x, probability_alignment_x = -8, 1
+            probability_artist = AnnotationBbox(
+                probability_label,
+                (edge, point_time),
+                xybox=(probability_offset_x, 0),
+                xycoords="data",
+                boxcoords="offset points",
+                box_alignment=(probability_alignment_x, 0.5),
+                frameon=False,
+                pad=0,
+                annotation_clip=False,
+                zorder=6,
+            )
+            probability_ax.add_artist(probability_artist)
         # Latest actual points stay primary; projections are secondary below them.
         endpoint_specs = []
         for frame, color in zip(frames, TEAM_COLORS):
@@ -771,6 +799,42 @@ def plot_matchup(
             if artist.get_window_extent(renderer).x1 > card_right:
                 artist.remove()
                 labels[index] = add_endpoint_label(endpoint_specs[index], False)
+
+        # Align all realized endpoint-value baselines in one rendered row.
+        _crop_unused_bottom(fig, dpi=135)
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+
+        def score_text_artist(artist):
+            offsetbox = artist.offsetbox
+            if isinstance(offsetbox, VPacker):
+                return offsetbox.get_children()[0]._text
+            return offsetbox._text
+
+        point_score_artists = [
+            score_text_artist(artist) for artist in labels if artist is not None
+        ]
+        realized_artists = point_score_artists
+        if "probability_artist" in locals():
+            realized_artists.append(score_text_artist(probability_artist))
+        if realized_artists:
+            point_baselines = [
+                artist.get_window_extent(renderer).y0
+                for artist in point_score_artists
+            ]
+            endpoint_value_baseline_y = (
+                sum(point_baselines) / len(point_baselines)
+                if point_baselines
+                else realized_artists[0].get_window_extent(renderer).y0
+            )
+            for annotation, text_artist in zip(
+                labels + ([probability_artist] if "probability_artist" in locals() else []),
+                realized_artists,
+            ):
+                baseline_y = text_artist.get_window_extent(renderer).y0
+                offset_x, offset_y = annotation.xybox
+                offset_y += (endpoint_value_baseline_y - baseline_y) * 72 / fig.dpi
+                annotation.xybox = (offset_x, offset_y)
         final_left, final_right = probability_ax.get_xlim()
         final_even_fraction = (0 - final_left) / (final_right - final_left)
         assert np.isclose(final_left, -left_extent)
@@ -779,7 +843,6 @@ def plot_matchup(
             assert not np.isclose(final_even_fraction, 0.5)
         output = Path(savepath)
         output.parent.mkdir(parents=True, exist_ok=True)
-        _crop_unused_bottom(fig, dpi=135)
         fig.savefig(output, dpi=135)
         plt.close(fig)
     return output

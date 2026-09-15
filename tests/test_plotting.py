@@ -6,7 +6,13 @@ import pandas as pd
 
 from fantasy_football.plotting import generate_matchup_plots
 from fantasy_football.plotting.matchups import normalize_team_names
-from fantasy_football.plotting.renderer import _asymmetric_probability_scale
+from fantasy_football.plotting.renderer import (
+    PROBABILITY_HARD_BOUNDARY_COLOR,
+    PROBABILITY_HARD_BOUNDARY_LINEWIDTH,
+    PROBABILITY_HARD_BOUNDARY_ZORDER,
+    _asymmetric_probability_scale,
+    _probability_hard_boundaries,
+)
 from fantasy_football.plotting.timeline import game_windows
 from fantasy_football.plotting.swings import (
     largest_probability_swings,
@@ -28,6 +34,14 @@ class PlottingTests(unittest.TestCase):
         self.assertIn("EVEN", wide[3])
         self.assertIn("100%", wide[3])
         self.assertEqual(narrow[4], (-5.0, 0.0, 5.0))
+
+    def test_both_100_percent_boundaries_use_the_same_hard_boundary_style(self):
+        self.assertEqual(_probability_hard_boundaries(50.0, 50.0), (-50.0, 50.0))
+        self.assertEqual(PROBABILITY_HARD_BOUNDARY_COLOR, "#999999")
+        self.assertEqual(
+            (PROBABILITY_HARD_BOUNDARY_LINEWIDTH, PROBABILITY_HARD_BOUNDARY_ZORDER),
+            (0.7, 0.75),
+        )
 
     def test_probability_labels_show_only_outer_and_midpoint_values(self):
         _, _, ticks, labels, _ = _asymmetric_probability_scale(
