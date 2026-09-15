@@ -245,7 +245,9 @@ def _sync(args: argparse.Namespace) -> int:
     failed = False
     total = 0
     # Each league has a separate destination prefix and its own GCS client.
-    download_workers = min(16, max(4, len(targets) * 4))
+    # Match the default Google HTTP connection pool rather than creating
+    # excess connections that urllib3 immediately discards.
+    download_workers = min(10, max(4, len(targets) * 2))
     logging.info(
         "Sync parallelizing %d league coordinators across %d download workers",
         len(targets),
