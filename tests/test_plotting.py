@@ -16,6 +16,7 @@ from fantasy_football.plotting.renderer import (
 from fantasy_football.plotting.timeline import game_windows
 from fantasy_football.plotting.swings import (
     largest_probability_swings,
+    narrative_swing_annotations,
     probability_swings,
 )
 
@@ -40,7 +41,7 @@ class PlottingTests(unittest.TestCase):
         self.assertEqual(PROBABILITY_HARD_BOUNDARY_COLOR, "#999999")
         self.assertEqual(
             (PROBABILITY_HARD_BOUNDARY_LINEWIDTH, PROBABILITY_HARD_BOUNDARY_ZORDER),
-            (0.7, 0.75),
+            (0.7, 1.5),
         )
 
     def test_probability_labels_show_only_outer_and_midpoint_values(self):
@@ -125,6 +126,33 @@ class PlottingTests(unittest.TestCase):
         )
         self.assertEqual(
             result.loc[result.team_id == 2, "team_name"].tolist(), ["B", "B"]
+        )
+
+    def test_narrative_swing_annotations_use_player_delta(self):
+        team = pd.DataFrame(
+            {
+                "timestamp": pd.to_datetime([1000, 1030], unit="s", utc=True),
+                "team_id": [1, 1],
+                "win_probability": [0.50, 0.00],
+            }
+        )
+        players = pd.DataFrame(
+            {
+                "timestamp": pd.to_datetime([1000, 1030], unit="s", utc=True),
+                "team_id": [1, 1],
+                "player_id": [7, 7],
+                "player_name": ["Isaiah Likely", "Isaiah Likely"],
+                "points_live": [0.0, 7.2],
+                "applied_points_json": [
+                    '{"total":0,"components":{}}',
+                    '{"total":7.2,"components":{"rec_yd":7.2}}',
+                ],
+            }
+        )
+        annotations = narrative_swing_annotations(team, players, minimum_pp=50)
+        self.assertEqual(
+            annotations[1030],
+            "I. Likely: receiving yardage\n+7.2 pts \u00b7 \u221250 pp",
         )
 
     def test_render_normalized_data_to_png(self):

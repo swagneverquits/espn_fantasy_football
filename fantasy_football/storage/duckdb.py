@@ -75,3 +75,39 @@ def load_matchup_results(
         result = connection.sql(query).fetchdf()
 
     return result
+
+
+def load_player_results(
+    root: str | Path,
+    *,
+    provider: str,
+    league_id: str | int,
+    season: int,
+    matchup_period: int,
+) -> pd.DataFrame:
+    """Load player snapshots and names for optional matchup annotations."""
+    prefix = Path(root) / partition_prefix(provider, league_id, season, matchup_period)
+    player_glob = _parquet_glob(prefix, "player_snapshots")
+    if not list(player_glob.parent.glob(player_glob.name)):
+        return pd.DataFrame()
+    metadata_glob = _parquet_glob(prefix, "player_metadata")
+    metadata_join = ""
+    player_name = "CAST(p.player_id AS VARCHAR)"
+    if list(metadata_glob.parent.glob(metadata_glob.name)):
+        metadata_join = f"""
+        LEFT JOIN (
+            SELECT player_id,
+                   arg_max(player_name, {TIMESTAMP_COL}) AS player_name
+            FROM read_parquet({_sql_path(metadata_glob)}, union_by_name=true)
+            GROUP BY player_id
+        ) AS m USING (player_id)
+        """
+        player_name = "COALESCE(m.player_name, CAST(p.player_id AS VARCHAR))"
+    query = f"""
+        SELECT p.*, {player_name} AS player_name
+        FROM read_parquet({_sql_path(player_glob)}, union_by_name=true) AS p
+        {metadata_join}
+        ORDER BY p.{TIMESTAMP_COL}, p.player_id
+    """
+    with duckdb.connect() as connection:
+        return connection.sql(query).fetchdf()

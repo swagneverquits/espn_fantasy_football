@@ -120,7 +120,7 @@ def _add_analyze_parser(commands: argparse._SubParsersAction) -> None:
         "--tag-swings",
         type=float,
         metavar="PP",
-        help="Tag every win-probability swing of at least PP percentage points.",
+        help="Annotate the largest narrative swings of at least PP percentage points.",
     )
 
 
@@ -197,11 +197,21 @@ def _analyze_league(
 ) -> tuple[str, str, Path, int, int, float, float]:
     """Load and render one league; this is the process-pool boundary."""
     from fantasy_football.plotting import generate_matchup_plots
-    from fantasy_football.storage.duckdb import load_matchup_results
+    from fantasy_football.storage.duckdb import (
+        load_matchup_results,
+        load_player_results,
+    )
 
     provider, name, league_id = target
     load_started = perf_counter()
     data = load_matchup_results(
+        PARQUET_DIR,
+        provider=provider,
+        league_id=league_id,
+        season=season,
+        matchup_period=week,
+    )
+    player_data = load_player_results(
         PARQUET_DIR,
         provider=provider,
         league_id=league_id,
@@ -221,6 +231,7 @@ def _analyze_league(
         output_dir=output,
         league_name=name,
         tag_swings=tag_swings,
+        player_data=player_data,
     )
     render_seconds = perf_counter() - plot_started
     return provider, name, output, len(paths), len(data), load_seconds, render_seconds

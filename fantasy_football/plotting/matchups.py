@@ -27,6 +27,7 @@ def generate_matchup_plots(
     window_gap_seconds: int = 30 * 60,
     season: int | None = None,
     tag_swings: float | None = None,
+    player_data: pd.DataFrame | None = None,
 ) -> list[Path]:
     """Render every matchup as a phone-oriented portrait PNG."""
     if data.empty:
@@ -49,6 +50,13 @@ def generate_matchup_plots(
                 window_gap_seconds=window_gap_seconds,
                 season=season,
                 tag_swings=tag_swings,
+                player_data=(
+                    player_data[
+                        player_data[MATCHUP_ID_COL].eq(matchup_id)
+                    ]
+                    if player_data is not None and MATCHUP_ID_COL in player_data
+                    else None
+                ),
                 savepath=Path(output_dir) / f"matchup{number}.png",
             )
         )

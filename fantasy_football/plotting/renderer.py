@@ -1,5 +1,6 @@
 """Phone-oriented PNGs with chronological time running downward."""
 
+import logging
 import math
 from pathlib import Path
 
@@ -42,11 +43,14 @@ from .constants import (
     WIN_CHANCE_COL,
 )
 from .timeline import compressed_timeline, game_windows
-from .swings import probability_swings
+from .swings import narrative_swing_annotations, probability_swings
+
+logger = logging.getLogger(__name__)
 
 PROBABILITY_HARD_BOUNDARY_COLOR = "#999999"
 PROBABILITY_HARD_BOUNDARY_LINEWIDTH = 0.7
-PROBABILITY_HARD_BOUNDARY_ZORDER = 0.75
+PROBABILITY_HARD_BOUNDARY_ALPHA = 1.0
+PROBABILITY_HARD_BOUNDARY_ZORDER = 1.5
 
 
 def _probability_hard_boundaries(
@@ -57,6 +61,40 @@ def _probability_hard_boundaries(
         boundary
         for boundary, extent in ((-50.0, left_extent), (50.0, right_extent))
         if np.isclose(extent, 50.0)
+    )
+
+
+def _draw_probability_hard_boundary(
+    ax,
+    x: float,
+    y_start: float,
+    y_end: float,
+) -> None:
+    """Draw one 100% boundary for one active window without edge clipping."""
+    ax.figure.canvas.draw()
+    figure_transform = ax.figure.transFigure.inverted()
+    start = figure_transform.transform(ax.transData.transform((x, y_start)))
+    end = figure_transform.transform(ax.transData.transform((x, y_end)))
+    x_min, x_max = ax.get_xlim()
+    edge_pixel = 1.0 / ax.figure.bbox.width
+    if np.isclose(x, x_min):
+        start[0] += edge_pixel
+        end[0] += edge_pixel
+    elif np.isclose(x, x_max):
+        start[0] -= edge_pixel
+        end[0] -= edge_pixel
+    ax.add_artist(
+        Line2D(
+            [start[0], end[0]],
+            [start[1], end[1]],
+            transform=ax.figure.transFigure,
+            color=PROBABILITY_HARD_BOUNDARY_COLOR,
+            linewidth=PROBABILITY_HARD_BOUNDARY_LINEWIDTH,
+            alpha=PROBABILITY_HARD_BOUNDARY_ALPHA,
+            zorder=PROBABILITY_HARD_BOUNDARY_ZORDER,
+            clip_on=False,
+            snap=True,
+        )
     )
 
 
@@ -216,6 +254,8 @@ def plot_matchup(
     window_gap_seconds: int = 1800,
     season: int | None = None,
     tag_swings: float | None = None,
+    swing_annotations: dict[int, str] | None = None,
+    player_data: pd.DataFrame | None = None,
 ) -> Path:
     """Render a phone-oriented 1000x1500 matchup PNG."""
     data = matchup_df.copy()
@@ -224,6 +264,16 @@ def plot_matchup(
         times, unit="s" if pd.api.types.is_numeric_dtype(times) else None, utc=True
     ).dt.tz_convert("America/New_York")
     data = data.sort_values(TIMESTAMP_COL)
+    if player_data is not None and not player_data.empty:
+        player_data = player_data.copy()
+        player_data[TIMESTAMP_COL] = pd.to_datetime(
+            player_data[TIMESTAMP_COL],
+            unit="s"
+            if pd.api.types.is_numeric_dtype(player_data[TIMESTAMP_COL])
+            else None,
+            utc=True,
+        ).dt.tz_convert("America/New_York")
+        player_data = player_data.sort_values(TIMESTAMP_COL)
     ids = data[TEAM_ID_COL].drop_duplicates().tolist()
     if len(ids) != 2:
         raise ValueError("matchup_df must contain exactly two teams")
@@ -434,6 +484,15 @@ def plot_matchup(
                 labelcolor="#555555",
             )
         probability_ax.set_xlim(-left_extent, right_extent)
+        logger.debug(
+            "Probability hard-boundary inputs: left_extent=%s right_extent=%s "
+            "xlim=%s left_100=%s right_100=%s",
+            left_extent,
+            right_extent,
+            probability_ax.get_xlim(),
+            np.isclose(left_extent, 50.0),
+            np.isclose(right_extent, 50.0),
+        )
         probability_ax.set_xticks(ticks, labels)
         even_label = next(
             label
@@ -477,25 +536,74 @@ def plot_matchup(
                     clip_on=False,
                 )
 
+        narrative_artists = []
         if tag_swings is not None:
             swings = probability_swings(frames[0], minimum_pp=tag_swings)
+            narrative_annotations = narrative_swing_annotations(
+                frames[0], player_data, minimum_pp=tag_swings
+            )
+            logger.debug(
+                "Narrative swings matchup=%s candidates=%d annotations=%s",
+                matchup,
+                len(swings),
+                tuple(narrative_annotations),
+            )
             for swing in swings:
                 edge = 50 - swing.after * 100
                 point_time = map_time([mdates.date2num(swing.timestamp)])[0]
-                sign = "+" if swing.delta_pp > 0 else ""
-                probability_ax.annotate(
-                    f"Δ {sign}{swing.delta_pp:.0f} pp",
+                swing_key = int(
+                    swing.timestamp.timestamp()
+                    if isinstance(swing.timestamp, pd.Timestamp)
+                    else swing.timestamp
+                )
+                detail = narrative_annotations.get(swing_key) or (
+                    swing_annotations or {}
+                ).get(swing_key)
+                if not detail:
+                    continue
+                sign = ""
+                label = f"Δ {sign}{swing.delta_pp:.0f} pp"
+                if detail:
+                    label = f"{label}\n{detail}"
+                place_right = edge < 0
+                probability_ax.plot(
+                    edge,
+                    point_time,
+                    "o",
+                    color=TEAM_COLORS[0] if edge < 0 else TEAM_COLORS[1],
+                    markersize=3,
+                    markeredgecolor="white",
+                    zorder=5,
+                )
+                narrative_artist = probability_ax.annotate(
+                    detail,
                     (edge, point_time),
-                    xytext=(10 if edge >= 0 else -10, -10),
+                    xytext=(8 if place_right else -8, 0),
                     textcoords="offset points",
-                    ha="left" if edge >= 0 else "right",
-                    va="top",
+                    ha="left" if place_right else "right",
+                    va="center",
                     color="#4A4A4A",
-                    fontsize=10,
+                    fontsize=9,
                     fontweight="medium",
+                    arrowprops={
+                        "arrowstyle": "-",
+                        "color": "#999999",
+                        "linewidth": 0.6,
+                    },
                     annotation_clip=False,
                     zorder=5,
                 )
+                narrative_artist.set_clip_on(False)
+                narrative_artists.append(narrative_artist)
+            fig.canvas.draw()
+            logger.debug(
+                "Narrative annotation bboxes matchup=%s boxes=%s",
+                matchup,
+                tuple(
+                    tuple(round(value, 1) for value in artist.get_window_extent().bounds)
+                    for artist in narrative_artists
+                ),
+            )
         actual = pd.to_numeric(data[SCORE_COL], errors="coerce")
         actual = actual[np.isfinite(actual)]
         points_ax.set_xlim(0, max(1, float(actual.max()) * 1.22) if len(actual) else 1)
@@ -519,7 +627,6 @@ def plot_matchup(
             horizontal_segments = []
             vertical_segments = []
             even_segments = []
-            boundary_segments = []
             for mapped_start, mapped_end, display_hours in window_grid_positions:
                 for y in display_hours:
                     horizontal_segments.append(((x_min, y), (x_max, y)))
@@ -530,15 +637,6 @@ def plot_matchup(
                     vertical_segments.append(((x, mapped_start), (x, mapped_end)))
                 if ax is probability_ax:
                     even_segments.append(((0, mapped_start), (0, mapped_end)))
-                    boundary_segments.extend(
-                        (
-                            (boundary, mapped_start),
-                            (boundary, mapped_end),
-                        )
-                        for boundary in _probability_hard_boundaries(
-                            left_extent, right_extent
-                        )
-                    )
             ax.add_collection(
                 LineCollection(
                     horizontal_segments,
@@ -564,14 +662,16 @@ def plot_matchup(
                         zorder=0.8,
                     )
                 )
-            if boundary_segments:
-                ax.add_collection(
-                    LineCollection(
-                        boundary_segments,
-                        colors=PROBABILITY_HARD_BOUNDARY_COLOR,
-                        linewidths=PROBABILITY_HARD_BOUNDARY_LINEWIDTH,
-                        zorder=PROBABILITY_HARD_BOUNDARY_ZORDER,
-                    )
+            if ax is probability_ax:
+                final_left, final_right = probability_ax.get_xlim()
+                logger.debug(
+                    "Probability hard-boundary grid state: left_extent=%s "
+                    "right_extent=%s xlim=%s left_100=%s right_100=%s",
+                    left_extent,
+                    right_extent,
+                    (final_left, final_right),
+                    np.isclose(left_extent, 50.0),
+                    np.isclose(right_extent, 50.0),
                 )
 
         # Render one shared clock/date axis in the gutter between the plots.
@@ -579,24 +679,6 @@ def plot_matchup(
             display_point = probability_ax.transData.transform((0, display_time))
             return fig.transFigure.inverted().transform(display_point)[1]
 
-        clock_artists = []
-        for display_time, label, window_index in zip(
-            label_hours, label_texts, label_window_indices
-        ):
-            clock_artists.append(
-                (
-                    window_index,
-                    fig.text(
-                        time_axis_x,
-                        figure_y(display_time),
-                        label,
-                        fontsize=12,
-                        ha="center",
-                        va="center",
-                        color="#555555",
-                    ),
-                )
-            )
         date_artists = []
         for window_index, (raw_start, _, mapped_start, mapped_end) in enumerate(
             timeline
@@ -621,29 +703,87 @@ def plot_matchup(
                 )
             )
 
-        # Date headers own the window start; suppress only colliding clock text.
+        # Date headers own the window start; choose a separate four-hour phase
+        # for each window from the first clean whole-hour label.
         fig.canvas.draw()
         renderer = fig.canvas.get_renderer()
-        safety_pixels = 6
+        safety_pixels = 3
+        clock_artists = []
         for window_index, date_artist in date_artists:
-            date_box = date_artist.get_window_extent(renderer)
+            date_bbox = date_artist.get_window_extent(renderer)
             date_box = (
-                date_box.x0,
-                date_box.y0 - safety_pixels,
-                date_box.x1,
-                date_box.y1 + safety_pixels,
+                date_bbox.x0,
+                date_bbox.y0 - safety_pixels,
+                date_bbox.x1,
+                date_bbox.y1 + safety_pixels,
             )
-            for clock_window_index, clock_artist in clock_artists:
-                if clock_window_index != window_index:
+            raw_start, raw_end, _, _ = timeline[window_index]
+            candidates = hour_locator.tick_values(
+                mdates.num2date(raw_start, tz="America/New_York"),
+                mdates.num2date(raw_end, tz="America/New_York"),
+            )
+            candidates = candidates[(candidates >= raw_start) & (candidates <= raw_end)]
+            anchor_index = None
+            for candidate_index, raw_time in enumerate(candidates):
+                candidate_time = map_time([raw_time])[0]
+                candidate_label = mdates.num2date(
+                    raw_time, tz="America/New_York"
+                ).strftime("%I %p").lstrip("0")
+                candidate_artist = fig.text(
+                    time_axis_x,
+                    figure_y(candidate_time),
+                    candidate_label,
+                    fontsize=12,
+                    ha="center",
+                    va="center",
+                    color="#555555",
+                )
+                fig.canvas.draw()
+                clock_box = candidate_artist.get_window_extent(renderer)
+                # Time runs downward from the date header.  Use the actual
+                # rendered vertical gap between the date's bottom and the
+                # clock label's top; do not reject an otherwise valid label
+                # because of a symmetric padding box.
+                if clock_box.y1 <= date_bbox.y0:
+                    overlaps_date = (
+                        clock_box.x0 < date_box[2]
+                        and clock_box.x1 > date_box[0]
+                        and clock_box.y1 > date_bbox.y0 + safety_pixels
+                    )
+                else:
+                    overlaps_date = (
+                        clock_box.x0 < date_box[2]
+                        and clock_box.x1 > date_box[0]
+                        and clock_box.y0 < date_box[3]
+                        and clock_box.y1 > date_box[1]
+                    )
+                if overlaps_date:
+                    candidate_artist.remove()
                     continue
-                clock_box = clock_artist.get_window_extent(renderer)
-                if (
-                    clock_box.x0 < date_box[2]
-                    and clock_box.x1 > date_box[0]
-                    and clock_box.y0 < date_box[3]
-                    and clock_box.y1 > date_box[1]
-                ):
-                    clock_artist.remove()
+                anchor_index = candidate_index
+                clock_artists.append((window_index, candidate_artist))
+                break
+            if anchor_index is None:
+                continue
+            for raw_time in candidates[anchor_index + 4 :: 4]:
+                display_time = map_time([raw_time])[0]
+                label = mdates.num2date(
+                    raw_time, tz="America/New_York"
+                ).strftime("%I %p").lstrip("0")
+                clock_artists.append(
+                    (
+                        window_index,
+                        fig.text(
+                            time_axis_x,
+                            figure_y(display_time),
+                            label,
+                            fontsize=12,
+                            ha="center",
+                            va="center",
+                            color="#555555",
+                        ),
+                    )
+                )
         valid = frames[0][frames[0][WIN_CHANCE_COL].between(0, 1)]
         if not valid.empty:
             row = valid.iloc[-1]
@@ -835,8 +975,25 @@ def plot_matchup(
                 offset_x, offset_y = annotation.xybox
                 offset_y += (endpoint_value_baseline_y - baseline_y) * 72 / fig.dpi
                 annotation.xybox = (offset_x, offset_y)
+
+        # Draw the hard boundaries last, after the final crop/layout pass. This
+        # guarantees the +50 boundary survives the right axes edge in PNGs.
+        for boundary in _probability_hard_boundaries(left_extent, right_extent):
+            for mapped_start, mapped_end, _ in window_grid_positions:
+                _draw_probability_hard_boundary(
+                    probability_ax, boundary, mapped_start, mapped_end
+                )
         final_left, final_right = probability_ax.get_xlim()
         final_even_fraction = (0 - final_left) / (final_right - final_left)
+        logger.debug(
+            "Probability hard-boundary final state: left_extent=%s "
+            "right_extent=%s xlim=%s left_100=%s right_100=%s",
+            left_extent,
+            right_extent,
+            (final_left, final_right),
+            np.isclose(left_extent, 50.0),
+            np.isclose(right_extent, 50.0),
+        )
         assert np.isclose(final_left, -left_extent)
         assert np.isclose(final_right, right_extent)
         if left_extent != right_extent:
