@@ -632,7 +632,11 @@ def plot_matchup(
                     horizontal_segments.append(((x_min, y), (x_max, y)))
                 x_grid = ax.get_xticks()
                 if ax is probability_ax:
-                    x_grid = np.concatenate((x_grid, ax.get_xticks(minor=True)))
+                    # Probability gridlines intentionally follow only the
+                    # visible top-axis labels.  Bounds and internal 5-point
+                    # calculations remain available for scaling, but an
+                    # unlabeled probability position gets no vertical line.
+                    x_grid = np.asarray(ticks, dtype=float)
                 for x in x_grid:
                     vertical_segments.append(((x, mapped_start), (x, mapped_end)))
                 if ax is probability_ax:

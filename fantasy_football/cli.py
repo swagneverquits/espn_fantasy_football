@@ -211,12 +211,18 @@ def _analyze_league(
         season=season,
         matchup_period=week,
     )
-    player_data = load_player_results(
-        PARQUET_DIR,
-        provider=provider,
-        league_id=league_id,
-        season=season,
-        matchup_period=week,
+    # Player snapshots are only needed for optional narrative swing
+    # annotations.  Normal plot generation should load team data only.
+    player_data = (
+        load_player_results(
+            PARQUET_DIR,
+            provider=provider,
+            league_id=league_id,
+            season=season,
+            matchup_period=week,
+        )
+        if tag_swings is not None
+        else None
     )
     load_seconds = perf_counter() - load_started
     output = PLOTS_DIR / str(season)
